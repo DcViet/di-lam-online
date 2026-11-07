@@ -733,7 +733,7 @@ function buildStations() {
     s.paint = () => { s.label.material.map.dispose(); s.label.material.map = paint(); s.label.material.needsUpdate = true; };
   });
 }
-function buildWorld() { buildShell(); buildFurniture(); deptProps(); flushStatics(); buildStations(); }
+function buildWorld() { applyStationSet(); buildShell(); buildFurniture(); deptProps(); flushStatics(); buildStations(); }
 
 
 /* ============ 4. NHÂN VẬT: NGƯỜI CHƠI ============ */
@@ -820,7 +820,7 @@ function initNPCs() {
     const n = addNPC('staff', { desk: d, x: d.x, z: d.z + 0.95, h: Math.PI, st: 'seat', tmr: rnd(25, 90), shirt: hung ? 0xd05a4a : pick(DEPT.shirts), name: hung ? 'Hùng' : roster[k % roster.length].name, call: DEPT.titles ? DEPT.titles[k % DEPT.titles.length] + ' ' + (hung ? 'Hùng' : roster[k % roster.length].name) : (hung ? 'Anh Hùng' : roster[k % roster.length].call), spd: rnd(1.05, 1.35) });
     d.npc = n; n.sit = 1; n.typing = 1; n.y = 0.42; if (hung) { NPC.hung = n; n.tag = nameTag('Hùng'); }
   });
-  NPC.boss = addNPC('boss', { x: -14, z: -12.2, h: 0, sc: 1.1, shirt: 0x23262e, pants: 0x23262e, hair: 0x8a8a8a, skin: 0xe8b88c, st: 'desk', spd: 1.1 }); NPC.boss.sit = 1; NPC.boss.y = 0.42; NPC.boss.tag = nameTag('Sếp', '#ffb0d8');
+  NPC.boss = addNPC('boss', { x: -14, z: -12.2, h: 0, sc: 1.1, shirt: 0x23262e, pants: 0x23262e, hair: 0x8a8a8a, skin: 0xe8b88c, st: 'desk', spd: 1.1 }); NPC.boss.sit = 1; NPC.boss.y = 0.42; NPC.boss.tag = nameTag(SX('Sếp', 'Chủ tịch', 'Chairman'), '#ffb0d8');
   NPC.recep = addNPC('recep', { x: -8, z: 11.6, h: Math.PI, shirt: 0xf0a8c0, pants: 0x2a3550, hair: 0x15110e, st: 'seat' }); NPC.recep.sit = 1; NPC.recep.typing = 1; NPC.recep.y = 0.42; NPC.recep.tag = nameTag('Lan');
   NPC.ship = addNPC('ship', { x: 0, z: 22, h: Math.PI, shirt: 0xff7a1a, pants: 0x1c1c22, hat: true, hatc: 0xff9a2a, st: 'out', active: false, spd: 2.2 }); NPC.ship.tag = nameTag('Shipper', '#ffb070');
   _R.makeScale(0, 0, 0); for (let i = NPC.length; i < NP_MAX; i++) for (let m = 0; m < 9; m++) crowd[m].setMatrixAt(i, _R); // ẩn các chỗ trống (đổi server nhỏ hơn)
@@ -906,10 +906,18 @@ const fmtT = T => String(Math.floor(T / 60) % 24).padStart(2, '0') + ':' + Strin
 const taskById = id => G.tasks.find(t => t.id === id);
 const isOpen = id => { const t = taskById(id); return !!t && t.st === 'open' && t.start <= G.T; };
 function newGame(days) {
-  Object.assign(G, { days, day: 1, T: 480, kpi: 0, goal: 50, kpiTotal: 0, energy: 78, mood: 78, boss: 55, team: 55, money: 500000, fines: [], otMin: 0, otPay: 0, tasks: [], queue: [], flags: {}, order: null, paid: false, over: false, caught: 0, wins: 0 });
+  Object.assign(G, { days, day: 1, T: 480, kpi: 0, goal: 50, kpiTotal: 0, energy: 78, mood: 78, boss: 55, team: 55, money: isSep() ? 20000000 : 500000, fines: [], otMin: 0, otPay: 0, tasks: [], queue: [], flags: {}, order: null, paid: false, over: false, caught: 0, wins: 0 });
   startDay(true);
 }
 function newDayTasks() {
+  if (isSep()) return [
+    { id: 'checkin', text: V('Có mặt tại công ty trước 8:30', 'Be at the office by 8:30'), start: 480, due: 510 },
+    { id: 'kpi', text: V('Hoàn thành mục tiêu điều hành', 'Hit today\'s management target'), start: 480, due: 1050 },
+    { id: 'meeting', text: V('Họp Ban lãnh đạo (9:30)', 'Board meeting (9:30)'), start: 560, due: 625 },
+    { id: 'files', text: V('Ký duyệt hồ sơ trình', 'Sign off pending documents'), start: 630, due: 720 },
+    { id: 'lunch', text: V('Tiếp đối tác ăn trưa (11:30–13:30)', 'Lunch with the partner (11:30–13:30)'), start: 690, due: 810 },
+    { id: 'home', text: 'Tan ca (từ 17:30)', start: 1050, due: 1320 }
+  ];
   return [
     { id: 'checkin', text: 'Chấm công trước 8:30', start: 480, due: 510 },
     { id: 'kpi', text: 'Làm việc đạt KPI', start: 480, due: 1050 },
@@ -920,8 +928,8 @@ function newDayTasks() {
   ];
 }
 function startDay(first) {
-  G.T = 480; G.kpi = 0; G.goal = 45 + G.day * 5; G.tasks = newDayTasks().map(t => Object.assign({ st: 'open' }, t)); G.flags = { argueAt: rnd(620, 930), scoldAt: rnd(840, 960), patrolAt: rnd(500, 600), ate: false, napped: false, gossipCool: 0, summoned: false, otAsked: false, otOn: false, kpiAnnounced: false, argued: false, dayDone: false, reqAt: [rnd(540, 660), rnd(780, 930)] }; G.req = null;
-  if (G.day === G.days) G.tasks.push({ id: 'salary', st: 'open', text: 'Nhận lương ở kế toán', start: 1020, due: 1320 });
+  G.T = 480; G.kpi = 0; G.goal = 45 + G.day * 5; G.tasks = newDayTasks().map(t => Object.assign({ st: 'open' }, t)); G.flags = { argueAt: isSep() ? 1e9 : rnd(620, 930), scoldAt: rnd(840, 960), patrolAt: rnd(500, 600), ate: false, napped: false, gossipCool: 0, summoned: false, otAsked: false, otOn: false, kpiAnnounced: false, argued: false, dayDone: false, reqAt: [rnd(540, 660), rnd(780, 930)] }; G.req = null;
+  if (G.day === G.days) G.tasks.push({ id: 'salary', st: 'open', text: SX('Nhận lương ở kế toán', 'Duyệt bảng lương toàn công ty', 'Approve the company payroll'), start: 1020, due: 1320 });
   G.queue.length = 0; ST.fast = false; $('bSpeed').style.opacity = 1;
   player.x = -4.5; player.z = 7.9; player.h = Math.PI; player.pose = 'idle'; cam.yaw = 0; cam.tx = -4.5; cam.tz = 7.9;
   NPC.forEach(n => { if (n.role === 'staff') { n.locked = false; if (n.desk && n.st !== 'seat') { n.x = n.desk.x; n.z = n.desk.z + 0.95; n.st = 'seat'; n.face = Math.PI; n.tmr = rnd(25, 90); } } });
@@ -934,7 +942,7 @@ function applyFx(fx) {
   for (const k in fx) { if (k === 'money') G.money += fx.money; else if (k === 'kpi') { G.kpi = Math.max(0, G.kpi + fx.kpi); if (fx.kpi > 0) G.kpiTotal += fx.kpi; } else G[k] = clampStat(G[k] + fx[k]); }
   renderHUD(); checkKpi();
 }
-function fxChips(fx) { return Object.entries(fx).filter(v => v[1]).map(([k, v]) => `${FXN[k][0]} ${v > 0 ? '+' : ''}${k === 'money' ? fmtMoney(v) : Math.round(v)}`).join('   '); }
+function fxChips(fx) { return Object.entries(fx).filter(v => v[1]).map(([k, v]) => `${k === 'boss' && isSep() ? '🎩' : FXN[k][0]}${v > 0 ? '+' : ''}${k === 'money' ? fmtMoney(v) : Math.round(v)}`).join('   '); }
 function fine(label, amount) { G.fines.push({ label, amount }); toast(`Bị trừ ${fmtMoney(amount)}: ${label}`, 3200); }
 function checkKpi() { if (G.kpi >= G.goal && !G.flags.kpiAnnounced) { G.flags.kpiAnnounced = true; doneTask('kpi'); toast('Đã đạt KPI hôm nay! Sếp sẽ rất hài lòng.'); Aud.good(); } }
 
@@ -957,12 +965,12 @@ const PENALTY = {
   files() { applyFx({ kpi: -5, boss: -5 }); toast('Hồ sơ bị trễ, lễ tân nhắc cả phòng.'); },
   kpi() { applyFx({ boss: -8, mood: -5 }); toast('Chưa đạt KPI hôm nay. Sếp nhíu mày.'); },
   lunch() { applyFx({ energy: -15, mood: -8 }); toast('Nhịn ăn trưa, bụng kêu rột rột…'); },
-  ship() { applyFx({ mood: -8 }); toast('Shipper chờ lâu quá nên đã đi, ly trà sữa… mất tích.'); NPC.ship.active = false; G.order = null; },
+  ship() { applyFx({ mood: -8 }); toast(SX('Shipper chờ lâu quá nên đã đi, ly trà sữa… mất tích.', 'Shipper chờ lâu quá nên đã đi, ly cà phê… mất tích.', 'The courier waited too long and left. The coffee has vanished.')); NPC.ship.active = false; G.order = null; },
   argue() { applyFx({ team: -8 }); toast('Hùng giận dỗi quay về bàn.'); hungHome(); },
   req() { applyFx({ boss: -6, team: -6 }); toast('Việc nhờ bị trễ, mọi người nhắc khéo trong group.'); reqClose(); },
   scold() { applyFx({ boss: -10, mood: -5 }); toast('Sếp nhắn Zalo cả đoạn dài vì bạn không vào phòng.'); G.flags.summoned = false; }
 };
-function failTask(id) { const t = taskById(id); if (t && t.st === 'open') { t.st = 'fail'; renderTasks(); PENALTY[id] && PENALTY[id](); } }
+function failTask(id) { const t = taskById(id); if (t && t.st === 'open') { t.st = 'fail'; renderTasks(); const pf = (isSep() && SEP_PEN[id]) || PENALTY[id]; pf && pf(); } }
 
 /* ---- Đồng hồ: 1 giây thật = 3 phút trong game (khi đang đi lại). Mini game tự cộng thời gian ---- */
 function advance(mins) {
@@ -975,9 +983,10 @@ function onMinute(m) {
   if (m % 5 === 0) renderHUD();
   G.flags.reqAt.forEach(t => { if (m === Math.floor(t)) deptRequest(); });
   for (const t of G.tasks) if (t.st === 'open' && t.due === m) failTask(t.id);
-  for (const t of G.tasks) if (t.start === m && t.st === 'open') { renderTasks(); if (t.id === 'meeting') toast('Sắp đến giờ họp giao ban, vào phòng họp nhé!'); else if (t.id === 'files') toast('Lễ tân gọi: có hồ sơ cho bạn!'); else if (t.id === 'lunch') toast('Sắp đến giờ nghỉ trưa, nghĩ xem ăn gì nào.'); }
-  if (m === 510 && taskById('checkin').st === 'open') toast('Quá 8:30 rồi, chấm công trễ sẽ bị trừ lương!');
-  if (m === G.flags.patrolAt || (m > 560 && m % 55 === 0 && Math.random() < 0.5)) { if (NPC.boss.st === 'desk' && !G.flags.summoned) { bossPatrol(); toast('Sếp đang đi tuần quanh phòng!', 2600); Aud.boss(); } }
+  for (const t of G.tasks) if (t.start === m && t.st === 'open') { renderTasks(); if (t.id === 'meeting') toast(SX('Sắp đến giờ họp giao ban, vào phòng họp nhé!', 'Sắp đến giờ họp Ban lãnh đạo, mọi người đang chờ!', 'The board meeting is about to start, everyone is waiting!')); else if (t.id === 'files') toast(SX('Lễ tân gọi: có hồ sơ cho bạn!', 'Thư ký báo: có chồng hồ sơ chờ sếp ký!', 'Your secretary: a stack of documents is waiting for your signature!')); else if (t.id === 'lunch') toast(SX('Sắp đến giờ nghỉ trưa, nghĩ xem ăn gì nào.', 'Sắp đến giờ hẹn ăn trưa với đối tác, chọn nhà hàng nào?', 'Lunch with the partner is coming up. Which restaurant?')); }
+  if ((m === 540 || m === 725 || m === 905 || m === 1040) && ST.mode === 'play') toast(pick(TREND_TOASTS), 4200);
+  if (m === 510 && taskById('checkin').st === 'open') toast(SX('Quá 8:30 rồi, chấm công trễ sẽ bị trừ lương!', 'Quá 8:30 rồi, nhân viên đã bắt đầu để ý đấy!', 'It is past 8:30 and the staff are starting to notice!'));
+  if (m === G.flags.patrolAt || (m > 560 && m % 55 === 0 && Math.random() < 0.5)) { if (NPC.boss.st === 'desk' && !G.flags.summoned) { bossPatrol(); toast(SX('Sếp đang đi tuần quanh phòng!', 'Chủ tịch đang đi một vòng quanh tầng!', 'The Chairman is walking around the floor!'), 2600); Aud.boss(); } }
   if (m === Math.floor(G.flags.argueAt) && !G.flags.argued) { G.flags.argued = true; hungToPrinter(); }
   if (m === Math.floor(G.flags.scoldAt) && Math.random() < 0.7) summon();
   if (G.order && !G.order.arrived && m >= G.order.eta) { G.order.arrived = true; shipperArrive(); }
@@ -987,7 +996,7 @@ function onMinute(m) {
 }
 function checkKpiEnd() { const t = taskById('kpi'); if (t && t.st === 'open') { if (G.kpi >= G.goal) doneTask('kpi'); else failTask('kpi'); } }
 function summon() {
-  if (G.flags.summoned) return; G.flags.summoned = true; addTask({ id: 'scold', text: 'Sếp gọi vào phòng!', due: Math.floor(G.T) + 40 }); toast('Sếp gọi bạn vào phòng! Mặt sếp hơi… đỏ.', 3600); Aud.boss();
+  if (G.flags.summoned) return; G.flags.summoned = true; addTask({ id: 'scold', text: SX('Sếp gọi vào phòng!', 'Chủ tịch gọi vào phòng!', 'The Chairman wants to see you!'), due: Math.floor(G.T) + 40 }); toast(SX('Sếp gọi bạn vào phòng! Mặt sếp hơi… đỏ.', 'Chủ tịch gọi bạn vào phòng! Ông có vẻ không vui.', 'The Chairman summons you! He does not look happy.'), 3600); Aud.boss();
 }
 function hungToPrinter() {
   const n = NPC.hung; if (!n || n.st === 'walk') { G.flags.argued = false; return; } n.locked = true;
@@ -996,7 +1005,7 @@ function hungToPrinter() {
 }
 function hungHome() { const n = NPC.hung; if (!n) return; n.photo = 0; n.tmr = rnd(30, 70); const d = n.desk; goPath(n, [[-15.4, 7.75], [5.3, 7.75], [5.3, AISLE[d.r]], [d.x, AISLE[d.r]], [d.x, d.z + 0.95]], () => { n.st = 'seat'; n.face = Math.PI; n.locked = false; }); }
 function shipperArrive() {
-  const s = NPC.ship; s.active = true; s.x = 0; s.z = 17; s.st = 'walk'; s.photo = 0; goPath(s, [[0, 13.8], [-0.6, 12.0]], () => { s.st = 'idle'; s.face = Math.PI; }); G.order.ready = true; addTask({ id: 'ship', text: 'Ra cửa lấy trà sữa', due: Math.floor(G.T) + 35 }); toast('Shipper tới rồi! Ra cửa lấy trà sữa đi!'); Aud.ding();
+  const s = NPC.ship; s.active = true; s.x = 0; s.z = 17; s.st = 'walk'; s.photo = 0; goPath(s, [[0, 13.8], [-0.6, 12.0]], () => { s.st = 'idle'; s.face = Math.PI; }); G.order.ready = true; addTask({ id: 'ship', text: SX('Ra cửa lấy trà sữa', 'Ra cửa nhận cà phê', 'Pick up the coffee at the door'), due: Math.floor(G.T) + 35 }); toast(SX('Shipper tới rồi! Ra cửa lấy trà sữa đi!', 'Shipper tới rồi! Ra cửa nhận cà phê đi!', 'The courier is here! Go pick up the coffee!')); Aud.ding();
 }
 function shipperLeave() { const s = NPC.ship; goPath(s, [[0, 13.8], [0, 20]], () => { s.active = false; s.st = 'out'; }); }
 
@@ -1054,7 +1063,7 @@ ACT.checkin = async () => {
       const btn = h('button', 'btn big', '🖐️ Quét vân tay', b); btn.style.width = '100%';
       btn.addEventListener('click', () => {
         tries++; if (pos >= zl && pos <= zl + zw) { clearInterval(iv); Aud.beep(); res(); }
-        else { Aud.bad(); msg.textContent = pick(['Máy: ngón tay hơi ẩm, thử lại!', 'Máy: không nhận ra vân tay… bạn là ai vậy?', 'Máy: vui lòng đặt ngón tay đúng vị trí.', 'Máy: lỗi vân tay, hãy hít thở rồi thử lại.']); if (tries >= 3) { zw = 36; z.style.width = zw + '%'; } }
+        else { Aud.bad(); msg.textContent = pick(['Máy: ngón tay hơi ẩm, thử lại!', 'Máy: không nhận ra vân tay… bạn là ai vậy?', 'Máy: vui lòng đặt ngón tay đúng vị trí.', 'Máy: lỗi vân tay, hãy hít thở rồi thử lại.', V('Máy: cố tình trồng hoa, hoa không nở. Vô tình dậy muộn, vân tay cũng không nhận.', 'Machine: plant flowers on purpose and nothing blooms; wake up late and the fingerprint is rejected too.')]); if (tries >= 3) { zw = 36; z.style.width = zw + '%'; } }
       });
     });
   });
@@ -1085,18 +1094,18 @@ ACT.files = async () => {
 /* ---- Bàn làm việc: đánh máy / ngủ gục / OT / về nhà ---- */
 ACT.desk = async () => {
   focus('desk'); player.pose = 'sit';
-  const opts = [{ k: 'work', t: `${DEPT.icon} Làm việc phòng ${DEPT.name}`, s: taskById('req') && taskById('req').st === 'open' ? 'Có người đang nhờ, làm xong được thưởng!' : 'Tăng KPI, tốn năng lượng' }, { k: 'type', t: '⌨️ Soạn văn bản (đánh máy)', s: 'Tăng KPI nhẹ' }, { k: 'sleep', t: '😴 Ngủ gục lén', s: 'Hồi năng lượng, coi chừng sếp đi tuần' }];
+  const opts = [{ k: 'work', t: isSep() ? V('📋 Điều hành & giải quyết việc', '📋 Run the business & make decisions') : `${DEPT.icon} Làm việc phòng ${DEPT.name}`, s: taskById('req') && taskById('req').st === 'open' ? SX('Có người đang nhờ, làm xong được thưởng!', 'Có người đang xin chỉ đạo, xử lý xong được thưởng!', 'Someone is waiting for your decision. Handle it for a bonus!') : SX('Tăng KPI, tốn năng lượng', 'Tăng điểm điều hành, tốn năng lượng', 'Boosts management score, costs energy') }, { k: 'type', t: SX('⌨️ Soạn văn bản (đánh máy)', '✉️ Soạn email chỉ đạo', '✉️ Write a directive email'), s: SX('Tăng KPI nhẹ', 'Tăng điểm điều hành nhẹ', 'Slightly boosts management score') }, { k: 'sleep', t: SX('😴 Ngủ gục lén', '💆 Ngả lưng ghế massage', '💆 Lean back in the massage chair'), s: SX('Hồi năng lượng, coi chừng sếp đi tuần', 'Hồi năng lượng, coi chừng đối tác đến sớm', 'Recovers energy, beware of early partners') }];
   if (G.T >= 1050 && G.flags.otOn && !G.flags.otDone) opts.push({ k: 'ot', t: '🌙 OT: chạy deadline', s: 'Tăng ca, có tiền OT' });
   if (G.T >= 1050) opts.push({ k: 'home', t: '🚪 Tan ca về nhà', s: G.day === G.days && !G.paid ? 'Hôm nay chốt lương, nhớ ghé kế toán' : 'Kết thúc ngày làm việc' });
   opts.push({ k: 'no', t: 'Đứng dậy' });
-  const i = await choose('Bàn làm việc', `${fmtT(G.T)} · KPI ${Math.round(G.kpi)}/${G.goal} · Năng lượng ${Math.round(G.energy)}`, opts), k = opts[i].k;
-  if (k === 'work') await actWork(); else if (k === 'type') await actType(); else if (k === 'sleep') await actSleep(); else if (k === 'ot') await actOT(); else if (k === 'home') await actHome(); else await endActivity(0);
+  const i = await choose(SX('Bàn làm việc', 'Bàn Giám đốc', 'Executive desk'),`${fmtT(G.T)} · KPI ${Math.round(G.kpi)}/${G.goal} · Năng lượng ${Math.round(G.energy)}`, opts), k = opts[i].k;
+  if (k === 'work') await actWork(); else if (k === 'type') await actType(); else if (k === 'sleep') await (isSep() ? sepNap() : actSleep()); else if (k === 'ot') await actOT(); else if (k === 'home') await actHome(); else await endActivity(0);
 };
 const TYPE_LINES = ['Kính gửi anh chị, em xin gửi báo cáo tuần này.', 'Em đã hoàn thành công việc đúng hạn ạ.', 'Mong anh chị xem xét và phản hồi sớm giúp em.', 'Đính kèm là bảng tổng hợp doanh số tháng.', 'Cảm ơn anh chị đã hỗ trợ em rất nhiều.', 'Dự án này cần chốt trước cuối ngày hôm nay.', 'Nhờ phòng kế toán kiểm tra giúp hóa đơn này.', 'Xin lỗi anh chị, em gửi nhầm file rồi ạ.', 'Họp xong em sẽ cập nhật tiến độ ngay.', 'Em xin phép nghỉ trưa để nạp lại năng lượng.'];
 async function actType() {
-  player.pose = 'type'; const lines = shuffle(TYPE_LINES.slice()).slice(0, 4); let i = 0, score = 0, done = false;
+  player.pose = 'type'; const lines = shuffle((isSep() ? TYPE_SEP : TYPE_LINES).slice()).slice(0, 4); let i = 0, score = 0, done = false;
   await new Promise(res => {
-    ui('Đánh máy', b => {
+    ui(SX('Đánh máy', 'Soạn email chỉ đạo', 'Write a directive email'), b => {
       h('div', 'say', 'Gõ lại từng câu cho đúng (sai vài chữ cũng tạm được). Hết giờ là dừng!', b);
       const target = h('div', 'doc', lines[0], b); target.style.fontSize = '15px';
       const inp = h('input', '', null, b); inp.id = 'typeIn'; inp.placeholder = tr('Gõ câu trên vào đây…'); inp.autocomplete = 'off'; inp.autocapitalize = 'off'; inp.spellcheck = false;
@@ -1112,7 +1121,7 @@ async function actType() {
     });
   });
   const fx = { kpi: Math.round(score * 0.9), energy: -8, mood: score < 10 ? -4 : -1 }; applyFx(fx);
-  await info('Đánh máy xong', [score >= 36 ? 'Ngón tay bay như múa. Đồng nghiệp bên cạnh nhìn nể.' : score >= 20 ? 'Gõ khá ổn, bản báo cáo trông có vẻ chuyên nghiệp.' : 'Gõ hơi chậm, nhưng ít ra cũng có file để gửi sếp.'], fx);
+  await info('Đánh máy xong', [score >= 36 ? SX('Ngón tay bay như múa. Đồng nghiệp bên cạnh nhìn nể.', 'Ngón tay bay như múa. Thư ký ngoài cửa nhìn nể.', 'Fingers flying. Your secretary outside looks impressed.') : score >= 20 ? SX('Gõ khá ổn, bản báo cáo trông có vẻ chuyên nghiệp.', 'Gõ khá ổn, email nghe rất có uy.', 'Typed well enough. The email sounds authoritative.') : SX('Gõ hơi chậm, nhưng ít ra cũng có file để gửi sếp.', 'Gõ hơi chậm, nhưng ít ra email chỉ đạo cũng đã được gửi đi.', 'A bit slow, but at least the directive got sent.')], fx);
   await endActivity(30);
 }
 async function actSleep() {
@@ -1174,7 +1183,7 @@ async function actHome() {
   if (G.day === G.days && !G.paid) { await info('Chưa về được', ['Hôm nay là ngày chốt lương. Hãy ghé quầy kế toán nhận lương trước đã!']); await endActivity(0); return; }
   G.flags.dayDone = true; closePanel(); cineOff(); player.pose = 'idle';
   const nm = (G.days === 3 ? NAMES3 : NAMES5)[G.day - 1];
-  await info(`Hết ${nm}`, [`KPI: ${Math.round(G.kpi)}/${G.goal}.`, `Tâm trạng ${Math.round(G.mood)} · Năng lượng ${Math.round(G.energy)} · Sếp ưa ${Math.round(G.boss)}.`, G.day < G.days ? 'Về nhà, ăn cơm, ngủ một giấc. Mai lại đi làm.' : '']);
+  await info(`Hết ${nm}`, [`KPI: ${Math.round(G.kpi)}/${G.goal}.`, isSep() ? VP(`Tâm trạng ${Math.round(G.mood)} · Năng lượng ${Math.round(G.energy)} · Uy tín ${Math.round(G.boss)}.`, 'Mood {} · Energy {} · Reputation {}.', 'Tâm trạng {} · Năng lượng {} · Uy tín {}.') : `Tâm trạng ${Math.round(G.mood)} · Năng lượng ${Math.round(G.energy)} · Sếp ưa ${Math.round(G.boss)}.`, G.day < G.days ? 'Về nhà, ăn cơm, ngủ một giấc. Mai lại đi làm.' : '']);
   closePanel(); G.day++; G.energy = clampStat(G.energy + 38); G.mood = clampStat(G.mood + 6);
   await fadeMsg(`Hết ${nm}.\nSáng hôm sau, ${(G.days === 3 ? NAMES3 : NAMES5)[G.day - 1]}…`); startDay(); await wait(0.8); await fadeOff(); setMode('play'); toast('Một ngày làm việc mới bắt đầu. Chấm công nào!', 3600);
 }
@@ -1182,10 +1191,10 @@ async function actHome() {
 /* ---- Ngủ trưa ---- */
 ACT.nap = async () => {
   if (G.energy > 92) { await info('Góc nghỉ ngơi', ['Bạn đang tỉnh như sáo, chưa buồn ngủ chút nào.']); await endActivity(0); return; }
-  const i = await choose('Ngủ trưa', 'Nằm lên túi lười, nhắm mắt một chút nhé. Ngủ bao lâu?', [{ t: '😌 Chợp mắt 15 phút', s: 'Hồi ít năng lượng' }, { t: '😴 Ngủ 30 phút', s: 'Vừa đủ' }, { t: '🛌 Ngủ 45 phút', s: 'Dễ ngủ quên, coi chừng bị chụp ảnh' }, { t: 'Thôi để sau' }]);
+  const i = await choose(SX('Ngủ trưa', 'Ghế massage', 'Massage chair'), SX('Nằm lên túi lười, nhắm mắt một chút nhé. Ngủ bao lâu?', 'Ngả lưng ra ghế massage, nhắm mắt một chút nhé. Nghỉ bao lâu?', 'Lean back in the massage chair and close your eyes. How long?'),[{ t: '😌 Chợp mắt 15 phút', s: 'Hồi ít năng lượng' }, { t: '😴 Ngủ 30 phút', s: 'Vừa đủ' }, { t: '🛌 Ngủ 45 phút', s: SX('Dễ ngủ quên, coi chừng bị chụp ảnh', 'Dễ ngủ quên, coi chừng lỡ cuộc hẹn', 'Easy to oversleep, you might miss an appointment') }, { t: 'Thôi để sau' }]);
   if (i === 3) { await endActivity(0); return; }
   const mins = [15, 30, 45][i], mul = G.flags.napped ? 0.5 : 1; G.flags.napped = true; const fx = { energy: Math.round([12, 22, 32][i] * mul), mood: Math.round([3, 6, 8][i] * mul) }; const snoop = Math.random() < [0.05, 0.12, 0.3][i];
-  if (snoop) { fx.mood -= 3; fx.team = 3; applyFx(fx); await info('Ngủ ngon quá!', ['Bạn tỉnh dậy thấy cả phòng đang cười. Có người quay lại clip bạn há miệng ngủ.', 'Thôi, cũng vui, coi như tạo kỷ niệm.'], fx); }
+  if (snoop) { fx.mood -= 3; fx.team = 3; applyFx(fx); await info('Ngủ ngon quá!', [SX('Bạn tỉnh dậy thấy cả phòng đang cười. Có người quay lại clip bạn há miệng ngủ.', 'Bạn tỉnh dậy thấy thư ký đứng chờ ngoài cửa, tay ôm chồng hồ sơ.', 'You wake up to find your secretary waiting at the door, arms full of files.'), SX('Thôi, cũng vui, coi như tạo kỷ niệm.', 'Thôi, coi như thư ký đã biết giờ ngủ trưa của sếp.', 'Well, now she knows your nap schedule.')], fx); }
   else { applyFx(fx); await info('Tỉnh táo hơn nhiều', ['Một giấc ngủ ngắn, đầu óc nhẹ tênh.'], fx); }
   await endActivity(mins, 'Zzz… Zzz…');
 };
@@ -1207,16 +1216,16 @@ ACT.lunch = async () => {
 /* ---- Đặt trà sữa ---- */
 ACT.tea = async () => {
   focus('tea'); if (G.order) { await info('Đặt trà sữa', ['Bạn đang có một đơn trên đường giao tới rồi. Kiên nhẫn chờ shipper nhé!']); await endActivity(0); return; }
-  const DR = [{ t: 'Trà sữa trân châu', p: 35000, icon: '🧋' }, { t: 'Matcha latte', p: 42000, icon: '🍵' }, { t: 'Trà đào cam sả', p: 32000, icon: '🍑' }, { t: 'Hồng trà sữa', p: 30000, icon: '☕' }];
-  const SZ = [{ t: 'Size M', p: 0 }, { t: 'Size L', p: 6000 }], SG = [{ t: '0%' }, { t: '30%' }, { t: '50%' }, { t: '100%' }], TP = [{ t: 'Trân châu', p: 7000 }, { t: 'Pudding', p: 7000 }, { t: 'Không topping', p: 0 }];
+  const DR = isSep() ? DR_SEP : [{ t: 'Trà sữa trân châu', p: 35000, icon: '🧋' }, { t: 'Matcha latte', p: 42000, icon: '🍵' }, { t: 'Trà đào cam sả', p: 32000, icon: '🍑' }, { t: 'Hồng trà sữa', p: 30000, icon: '☕' }];
+  const SZ = [{ t: 'Size M', p: 0 }, { t: 'Size L', p: 6000 }], SG = [{ t: '0%' }, { t: '30%' }, { t: '50%' }, { t: '100%' }], TP = isSep() ? [{ t: V('Kem muối', 'Salted cream'), p: 7000 }, { t: V('Thêm sữa đặc', 'Extra condensed milk'), p: 7000 }, { t: V('Không thêm', 'Nothing extra'), p: 0 }] : [{ t: 'Trân châu', p: 7000 }, { t: 'Pudding', p: 7000 }, { t: 'Không topping', p: 0 }];
   const sel = { d: 0, z: 0, s: 2, t: 0, g: false }; const price = () => Math.round((DR[sel.d].p + SZ[sel.z].p + TP[sel.t].p) * (sel.g ? 6 * 0.85 : 1));
   const ok = await new Promise(res => {
-    ui('Đặt trà sữa', b => {
+    ui(SX('Đặt trà sữa', 'Gọi cà phê', 'Order coffee'), b => {
       let cb; const upd = () => { cb.textContent = `Đặt hàng · ${fmtMoney(price())}`; };
       tileGroup(b, 'Chọn món', DR.map(x => ({ t: x.t, icon: x.icon })), () => sel.d, i => { sel.d = i; upd(); });
       tileGroup(b, 'Size', SZ, () => sel.z, i => { sel.z = i; upd(); }); tileGroup(b, 'Đường', SG, () => sel.s, i => { sel.s = i; }, 'grid3');
       tileGroup(b, 'Topping', TP, () => sel.t, i => { sel.t = i; upd(); }, 'grid3');
-      tileGroup(b, 'Đặt cho ai?', [{ t: 'Mình tôi' }, { t: 'Cả team (6 ly, giảm 15%)', s: '+tình đồng nghiệp' }], () => 0, i => { sel.g = i === 1; upd(); });
+      tileGroup(b, 'Đặt cho ai?', [{ t: 'Mình tôi' }, { t: SX('Cả team (6 ly, giảm 15%)', 'Cả Ban lãnh đạo (6 ly, giảm 15%)', 'The whole board (6 cups, 15% off)'), s: SX('+tình đồng nghiệp', '+tinh thần, +uy tín', '+morale, +reputation') }], () => 0, i => { sel.g = i === 1; upd(); });
       cb = h('button', 'btn big', '', b); cb.style.cssText = 'width:100%;margin-top:8px'; upd(); cb.addEventListener('click', () => { if (G.money < price()) { toast('Không đủ tiền trong ví!'); Aud.bad(); return; } res(true); });
       const cc = h('button', 'btn ghost', 'Thôi, tiết kiệm', b); cc.style.marginTop = '6px'; cc.addEventListener('click', () => res(false));
     });
@@ -1239,7 +1248,7 @@ ACT.ship = async () => {
     });
   });
   G.order = null; shipperLeave(); doneTask('ship'); Aud.slurp();
-  if (result === 'ok') { const fx = { mood: o.group ? 14 : 10, energy: 6 }; if (o.group) { fx.team = 8; } applyFx(fx); await info('Trà sữa đã về!', [o.group ? 'Cả team reo lên khi bạn xách túi to vào. Bạn bỗng thành "người được yêu quý nhất phòng".' : 'Ly trà sữa mát lạnh, ngọt đúng độ. Đời đẹp thật.'], fx); }
+  if (result === 'ok') { const fx = { mood: o.group ? 14 : 10, energy: 6 }; if (o.group) { fx.team = 8; } applyFx(fx); await info(SX('Trà sữa đã về!', 'Cà phê đã về!', 'The coffee is here!'), [o.group ? SX('Cả team reo lên khi bạn xách túi to vào. Bạn bỗng thành "người được yêu quý nhất phòng".', 'Cả Ban lãnh đạo gật gù khi bạn xách túi cà phê vào phòng họp. Cuộc họp tiếp theo bỗng nhẹ nhàng hẳn.', 'The whole board perks up as you carry in the coffee. The next meeting suddenly feels lighter.') : SX('Ly trà sữa mát lạnh, ngọt đúng độ. Đời đẹp thật.', 'Ly cà phê thơm, đắng vừa phải. Đời Tổng giám đốc cũng cần những phút như vầy.', 'A fragrant cup, bitter just right. Even a CEO needs moments like this.')], fx); }
   else { const fx = { mood: -2 }; applyFx(fx); await info('Ôi nhầm đơn', ['Bạn xách nhầm ly ít đường của người khác. Uống xong mới biết… vẫn ngon, nhưng hơi áy náy.'], fx); }
   await endActivity(10);
 };
@@ -1285,20 +1294,21 @@ const SCOLD = ['Em làm báo cáo kiểu gì mà sai tới ba chỗ hả?', 'Anh
 ACT.boss = async () => {
   focus('boss'); const sum = G.flags.summoned;
   if (!sum) {
-    const i = await choose('Phòng giám đốc', 'Sếp ngẩng lên khỏi laptop: "Có việc gì đó em?"', [{ t: '📊 Báo cáo tiến độ', s: `KPI hiện ${Math.round(G.kpi)}/${G.goal}` }, { t: '☕ Hỏi thăm sếp, pha cà phê', s: 'Nịnh nhẹ, boss +3' }, { t: 'Quay ra' }], 'boss');
+    const i = await choose(SX('Phòng giám đốc', 'Phòng Chủ tịch', 'Chairman\'s office'), SX('Sếp ngẩng lên khỏi laptop: "Có việc gì đó em?"', 'Chủ tịch ngẩng lên khỏi tập báo cáo: "Có chuyện gì thế?"', 'The Chairman looks up from a stack of reports: "What is it?"'), [{ t: SX('📊 Báo cáo tiến độ', '📊 Báo cáo kết quả kinh doanh', '📊 Report business results'), s: `KPI hiện ${Math.round(G.kpi)}/${G.goal}` }, { t: SX('☕ Hỏi thăm sếp, pha cà phê', '🍵 Mời Chủ tịch ly trà', '🍵 Offer the Chairman a cup of tea'), s: SX('Nịnh nhẹ, boss +3', 'Giữ quan hệ, uy tín +3', 'Keeps relations warm, reputation +3') }, { t: 'Quay ra' }], 'boss');
     if (i === 2) { await endActivity(0); return; }
-    if (i === 1) { const fx = { boss: 3, mood: -1 }; applyFx(fx); await info('Cà phê', ['Sếp nhấp một ngụm: "Ừ, em cũng biết ý đấy."'], fx); await endActivity(10); return; }
-    if (G.kpi >= G.goal * 0.7) { const fx = { boss: 6, mood: 3 }; applyFx(fx); await info('Báo cáo', ['Sếp gật gù: "Tiến độ ổn, cứ thế phát huy."'], fx); await endActivity(10); return; }
-    await info('Báo cáo', ['Sếp nhìn số liệu, từ từ tháo kính ra…', '"Vào đây, anh có chuyện muốn nói."']);
+    if (i === 1) { const fx = { boss: 3, mood: -1 }; applyFx(fx); await info(SX('Cà phê', 'Trà', 'Tea'), [SX('Sếp nhấp một ngụm: "Ừ, em cũng biết ý đấy."', 'Chủ tịch nhấp một ngụm: "Ừ, trà này ngon. Anh biết cách làm tôi vui."', 'The Chairman takes a sip: "Good tea. You know how to keep me happy."')], fx); await endActivity(10); return; }
+    if (G.kpi >= G.goal * 0.7) { const fx = { boss: 6, mood: 3 }; applyFx(fx); await info('Báo cáo', [SX('Sếp gật gù: "Tiến độ ổn, cứ thế phát huy."', 'Chủ tịch gật gù: "Kết quả ổn, cứ thế phát huy."', 'The Chairman nods: "Solid results. Keep it up."')], fx); await endActivity(10); return; }
+    await info('Báo cáo', [SX('Sếp nhìn số liệu, từ từ tháo kính ra…', 'Chủ tịch nhìn số liệu, từ từ tháo kính ra…', 'The Chairman studies the numbers and slowly takes off his glasses…'), SX('"Vào đây, anh có chuyện muốn nói."', '"Ngồi xuống đi, chúng ta cần nói chuyện."', '"Sit down. We need to talk."')]);
   }
   await scold();
 };
 async function scold() {
   let patience = 100, bat = false;
-  for (let i = 0; i < SCOLD.length && !bat; i++) {
-    const r = await new Promise(res => { ui('Nghe sếp la', b => {
-      h('div', 'say boss', `Sếp: ${SCOLD[i]}`, b); h('div', 'say', `Kiên nhẫn: ${Math.round(patience)}`, b); let live = false;
-      const nod = h('button', 'btn big', 'Dạ, em xin lỗi ạ…', b); nod.style.cssText = 'width:100%;height:60px;font-size:19px;opacity:.35'; const bt = optBtn(b, '🔥 Bật lại sếp', 'Liều lĩnh, có thể phải trả giá', () => { res('bat'); }, 'danger'); Aud.boss();
+  const SC = isSep() ? SCOLD_SEP : SCOLD;
+  for (let i = 0; i < SC.length && !bat; i++) {
+    const r = await new Promise(res => { ui(SX('Nghe sếp la', 'Chủ tịch chất vấn', 'The Chairman grills you'), b => {
+      h('div', 'say boss', isSep() ? `Chủ tịch: ${SC[i]}` : `Sếp: ${SC[i]}`, b); h('div', 'say', `Kiên nhẫn: ${Math.round(patience)}`, b); let live = false;
+      const nod = h('button', 'btn big', SX('Dạ, em xin lỗi ạ…', 'Vâng, tôi xin ghi nhận…', 'Understood, noted…'), b); nod.style.cssText = 'width:100%;height:60px;font-size:19px;opacity:.35'; const bt = optBtn(b, SX('🔥 Bật lại sếp', '🔥 Phản biện Chủ tịch', '🔥 Push back on the Chairman'),'Liều lĩnh, có thể phải trả giá', () => { res('bat'); }, 'danger'); Aud.boss();
       setTimeout(() => { live = true; nod.style.opacity = 1; nod.classList.add('flash'); Aud.ding(); }, 1200);
       const tm = setTimer(b, 3200, () => res('miss')); nod.addEventListener('click', () => { if (!live) { patience -= 8; Aud.bad(); res('early'); } else { tm.stop(); res('ok'); } });
     }); });
@@ -1306,9 +1316,9 @@ async function scold() {
   }
   if (bat) {
     const chance = clamp(0.25 + (G.boss - 50) / 200 + (G.team - 50) / 400, 0.1, 0.7);
-    if (Math.random() < chance) { const fx = { boss: 8, mood: 14, team: 4 }; applyFx(fx); await info('Bật sếp thành công!', ['Cả phòng nín thở. Sếp im lặng 5 giây rồi thở ra: "Ừ… anh cũng hơi nóng. Thôi bỏ qua."', 'Bạn bước ra, đi trong ánh nhìn kính phục của đồng nghiệp.'], fx); }
-    else { fine('Phạt thái độ', 150000); const fx = { boss: -20, mood: -4 }; applyFx(fx); Aud.bad(); await info('Bật sếp thất bại', ['Sếp đập tay xuống bàn: "Em nói lại xem!". Bạn quyết định… không nói lại.'], fx); }
-  } else if (patience >= 60) { const fx = { mood: -8, boss: 3 }; applyFx(fx); await info('Bão đã qua', ['Bạn gật đầu đúng nhịp, sếp dịu dần: "Thôi em ra làm đi."'], fx); }
+    if (Math.random() < chance) { const fx = { boss: 8, mood: 14, team: 4 }; applyFx(fx); await info('Bật sếp thành công!', [SX('Cả phòng nín thở. Sếp im lặng 5 giây rồi thở ra: "Ừ… anh cũng hơi nóng. Thôi bỏ qua."', 'Cả phòng nín thở. Chủ tịch im lặng 5 giây rồi thở ra: "Ừ… tôi cũng hơi nóng. Anh nói có lý."', 'Everyone holds their breath. The Chairman is silent for five seconds, then exhales: "Fair. I was a bit hot. You have a point."'), SX('Bạn bước ra, đi trong ánh nhìn kính phục của đồng nghiệp.', 'Bạn bước ra, đi trong ánh nhìn kính phục của Ban lãnh đạo.', 'You walk out under the admiring eyes of the executive team.')], fx); }
+    else { fine(SX('Phạt thái độ', 'Quỹ xin lỗi Hội đồng quản trị', 'Apology fund for the Board'), 150000); const fx = { boss: -20, mood: -4 }; applyFx(fx); Aud.bad(); await info('Bật sếp thất bại', [SX('Sếp đập tay xuống bàn: "Em nói lại xem!". Bạn quyết định… không nói lại.', 'Chủ tịch đập tay xuống bàn: "Anh nói lại xem!". Bạn quyết định… không nói lại.', 'The Chairman slams his hand on the desk: "Say that again!" You decide not to.')], fx); }
+  } else if (patience >= 60) { const fx = { mood: -8, boss: 3 }; applyFx(fx); await info('Bão đã qua', [SX('Bạn gật đầu đúng nhịp, sếp dịu dần: "Thôi em ra làm đi."', 'Bạn gật đầu đúng nhịp, Chủ tịch dịu dần: "Thôi, anh về làm tiếp đi."', 'You nod at the right moments and the Chairman softens: "All right, get back to work."')], fx); }
   else { const fx = { mood: -14 - Math.round((60 - patience) / 10), boss: -4 }; applyFx(fx); await info('Đứng hình', ['Bạn nghe được nửa chừng thì đầu óc… bay mất. Ra khỏi phòng chân vẫn còn run.'], fx); }
   doneTask('scold'); G.flags.summoned = false; await endActivity(25);
 }
@@ -1326,7 +1336,9 @@ ACT.meeting = async () => {
   const seats = [[-1.5, -9.2], [3, -9.2], [-1.5, -11.9]], guests = NPC.filter(n => n.role === 'staff' && n.st === 'seat').slice(0, 3);
   guests.forEach((g, k) => { g.locked = true; goPath(g, [[g.desk.x, AISLE[g.desk.r]], [5.3, AISLE[g.desk.r]], [5.3, -6.4], [1, -6.4], [1, -8.4], seats[k]], () => { g.st = 'idle'; g.sitTarget = 1; g.face = k < 2 ? Math.PI : 0; }); });
   await wait(1.2); let pts = 0, kpiGain = 4, bossD = 0, moodD = 0, teamD = 0;
-  for (let i = 0; i < MEET.length; i++) {
+  const MT = isSep() ? shuffle(MEET_SEP.slice()).slice(0, 4) : MEET;
+  for (let i = 0; i < MT.length; i++) {
+    if (isSep()) { const m = MT[i], os = shuffle(m.o.slice()); const c = await choose(VP(`Họp Ban lãnh đạo ${i + 1}/${MT.length}`, 'Board meeting {}/{}', 'Họp Ban lãnh đạo {}/{}'), m.b, os.map(o => ({ t: o.t, s: o.s })), 'boss'); const o = os[c]; applyFx(o.fx); (o.fx.boss || 0) < 0 ? Aud.bad() : Aud.good(); await info('Phản ứng', [o.r], o.fx, i === MT.length - 1 ? 'Kết thúc họp' : V('Nội dung tiếp', 'Next item')); continue; }
     const m = MEET[i], opts = [{ k: 'safe', t: m.safe, s: 'An toàn' }, { k: 'say', t: m.say, s: 'Góp ý thẳng thắn' }, { k: 'bat', t: m.bat, s: '🔥 Bật sếp! Rủi ro cao', c: 'danger' }, { k: 'phone', t: '📱 Tắt mic, lướt điện thoại', s: 'Lén lút một chút' }];
     const c = await choose(`Họp giao ban ${i + 1}/${MEET.length}`, `Sếp: ${m.b}`, opts, 'boss'); const k = opts[c].k; let txt, fx;
     if (k === 'safe') { fx = { boss: 2, mood: -3 }; txt = 'Sếp gật gù hài lòng, chuyển sang slide tiếp theo.'; }
@@ -1343,10 +1355,10 @@ ACT.meeting = async () => {
 /* ---- OT & kết thúc ngày ---- */
 async function otCall() {
   if (ST.mode !== 'play') { G.queue.push(otCall); return; } setMode('activity'); pAct.classList.remove('show');
-  const i = await choose('17:30 · Sếp nhắn', 'Sếp: "Tối nay cả phòng ở lại tăng ca chút nhé. Có trà sữa nha!"', [{ t: 'Dạ, em ở lại OT ạ', s: 'Sếp ưa +, có tiền OT, tốn sức' }, { t: 'Xin phép về đúng giờ ạ', s: 'Hơi mất lòng sếp, tâm trạng tốt hơn' }, { t: 'Giả vờ có việc gấp rồi chuồn', s: '50% bị sếp bắt gặp', c: 'danger' }], 'boss');
+  const i = await choose(SX('17:30 · Sếp nhắn', '17:30 · Chủ tịch nhắn', '17:30 · Message from the Chairman'), SX('Sếp: "Tối nay cả phòng ở lại tăng ca chút nhé. Có trà sữa nha!"', 'Chủ tịch: "Mai họp Hội đồng quản trị, tối nay anh ở lại chuẩn bị báo cáo cho kỹ nhé."', 'Chairman: "Board meeting tomorrow. Stay tonight and prepare the report properly."'), isSep() ? [{ t: V('Vâng, tôi ở lại chuẩn bị', 'Yes, I will stay and prepare'), s: V('Uy tín +, có thu nhập thêm, tốn sức', 'Reputation +, extra pay, costs energy') }, { t: V('Xin phép về đúng giờ, sáng mai tôi đến sớm', 'May I leave on time and come in early tomorrow?'), s: V('Hơi mất lòng, tâm trạng tốt hơn', 'Slightly displeases him, better mood') }, { t: V('Giả vờ có tiệc xã giao rồi chuồn', 'Pretend to have a business dinner and slip out'), s: V('50% bị Chủ tịch bắt gặp', '50% chance the Chairman catches you'), c: 'danger' }] : [{ t: 'Dạ, em ở lại OT ạ', s: 'Sếp ưa +, có tiền OT, tốn sức' }, { t: 'Xin phép về đúng giờ ạ', s: 'Hơi mất lòng sếp, tâm trạng tốt hơn' }, { t: 'Giả vờ có việc gấp rồi chuồn', s: '50% bị sếp bắt gặp', c: 'danger' }], 'boss');
   if (i === 0) { G.flags.otOn = true; applyFx({ boss: 8 }); toast('Bạn nhận OT. Ra bàn làm việc để chạy deadline nhé!', 4000); }
-  else if (i === 1) { applyFx({ boss: -6, mood: 8 }); toast('Sếp thở dài nhưng cho về.'); }
-  else if (Math.random() < 0.5) { fine('Chuồn bị bắt gặp', 100000); applyFx({ boss: -15, mood: -4 }); G.flags.otOn = true; toast('Sếp đứng ngay cửa thang máy: "Về đâu em?" Bạn phải quay lại OT.', 4200); }
+  else if (i === 1) { applyFx({ boss: -6, mood: 8 }); toast(SX('Sếp thở dài nhưng cho về.', 'Chủ tịch gật đầu cho về.', 'The Chairman nods and lets you go.')); }
+  else if (Math.random() < 0.5) { fine('Chuồn bị bắt gặp', 100000); applyFx({ boss: -15, mood: -4 }); G.flags.otOn = true; toast(SX('Sếp đứng ngay cửa thang máy: "Về đâu em?" Bạn phải quay lại OT.', 'Chủ tịch đứng ngay cửa thang máy: "Đi đâu đấy?" Bạn phải quay lại chuẩn bị báo cáo.', 'The Chairman is standing at the elevator: "Going somewhere?" Back to the report you go.'), 4200); }
   else { applyFx({ mood: 10, boss: -3 }); toast('Chuồn thành công! Thang máy mát hơn bình thường.'); }
   closePanel(); setMode('play');
 }
@@ -1357,7 +1369,7 @@ async function forcedHome() {
 }
 async function microSleep() {
   if (ST.mode !== 'play') { G.flags.slept = false; return; } setMode('activity'); const caught = Math.random() < 0.4; const fx = { energy: 24, mood: -2, boss: caught ? -8 : 0 };
-  applyFx(fx); await info('Gục tại bàn!', ['Mắt díp lại, đầu gục xuống bàn phím lúc nào không hay. Màn hình toàn chữ "jjjjjjjj".', caught ? 'Sếp đi ngang qua, nhìn bạn rất lâu…' : 'May mà không ai thấy.'], fx); await endActivity(20);
+  applyFx(fx); await info('Gục tại bàn!', ['Mắt díp lại, đầu gục xuống bàn phím lúc nào không hay. Màn hình toàn chữ "jjjjjjjj".', caught ? SX('Sếp đi ngang qua, nhìn bạn rất lâu…', 'Thư ký bước vào, nhìn bạn rất lâu…', 'Your secretary walks in and stares for a long moment…') : 'May mà không ai thấy.'], fx); await endActivity(20);
 }
 
 
@@ -1437,7 +1449,7 @@ function deptRequest() {
   const c = NPC.filter(n => n.role === 'staff' && n.st === 'seat' && !n.locked && n !== NPC.hung); if (!c.length) return; const n = pick(c); n.locked = true;
   const line = pick(DEPT.lines); G.req = { who: n.call || 'Đồng nghiệp', line, npc: n };
   goPath(n, [[n.desk.x, AISLE[n.desk.r]], [5.3, AISLE[n.desk.r]], [5.3, AISLE[2]], [OFF.myDesk.x + 0.9, AISLE[2]]], () => { n.st = 'chat'; n.tmr = 9999; n.face = Math.PI; npcSay(n, line, 7); });
-  addTask({ id: 'req', text: `${G.req.who} nhờ: ${DEPT.reqTitle}`, due: Math.floor(G.T) + 75 }); toast(`${G.req.who} (${DEPT.name}): "${line}"`, 4600); Aud.ding();
+  addTask({ id: 'req', text: `${G.req.who} nhờ: ${DEPT.reqTitle}`, due: Math.floor(G.T) + 75 }); toast(`${G.req.who} (${DEPT.label || DEPT.name}): "${line}"`, 4600); Aud.ding();
 }
 function reqClose() { const n = G.req && G.req.npc; if (n) { n.locked = false; n.tmr = 0; if (n.st === 'chat') sendHome(n); } G.req = null; }
 
@@ -1448,7 +1460,7 @@ async function actWork() {
   const useQuiz = DEPT.work === 'quiz' || (DEPT.quiz && DEPT.quiz.length && Math.random() < 0.5);
   if (useQuiz) score = await workQuiz(DEPT.work === 'quiz' || req ? intro : INTRO_Q); else if (DEPT.work === 'spot') score = await workSpot(intro); else score = await workDesign(intro);
   const fx = { kpi: Math.round(score * 0.45) + (req ? 8 : 0), energy: -8, mood: score >= 70 ? 2 : score >= 40 ? -1 : -4 }; if (req) { fx.team = 4; doneTask('req'); reqClose(); } if (score >= 85) fx.boss = 2;
-  applyFx(fx); await info(`Xong việc phòng ${DEPT.name}`, [score >= 85 ? 'Làm rất gọn, đồng nghiệp gật đầu hài lòng.' : score >= 50 ? 'Tạm ổn, vẫn còn vài chỗ cần chỉnh.' : 'Hơi lúng túng, làm lại chắc sẽ tốt hơn.', req ? `${req.who} cảm ơn bạn và quay về bàn.` : ''].filter(Boolean), fx); await endActivity(30);
+  applyFx(fx); await info(isSep() ? V('Xong việc điều hành', 'Management work done') : `Xong việc phòng ${DEPT.name}`, [score >= 85 ? SX('Làm rất gọn, đồng nghiệp gật đầu hài lòng.', 'Quyết định dứt khoát, Ban lãnh đạo gật đầu hài lòng.', 'Decisive calls. The board nods in approval.') : score >= 50 ? SX('Tạm ổn, vẫn còn vài chỗ cần chỉnh.', 'Tạm ổn, vẫn còn vài điểm cần cân nhắc thêm.', 'Decent, a few points still need thought.') : SX('Hơi lúng túng, làm lại chắc sẽ tốt hơn.', 'Hơi lúng túng, lần sau nên hỏi ý kiến cố vấn trước.', 'A bit shaky. Next time, consult an advisor first.'), req ? `${req.who} cảm ơn bạn và quay về bàn.` : ''].filter(Boolean), fx); await endActivity(30);
 }
 const VOUCH = [
   ['Phiếu chi tạm ứng', [['Ngày lập', '31/02/2025', 1], ['Số tiền', '2.500.000đ'], ['Bằng chữ', 'Hai triệu năm trăm nghìn đồng'], ['Mã số thuế', '0312345678'], ['Người ký', 'Có chữ ký ✓']]],
@@ -1490,7 +1502,7 @@ async function workQuiz(intro) {
   const list = shuffle(DEPT.quiz.slice()).slice(0, 4); let score = 0;
   for (let i = 0; i < list.length; i++) {
     const q = list[i], opts = shuffle(q[2].map((o, k) => ({ t: o[0], s: [10, 5, 0][k], f: o[1] })));
-    const c = await choose(`${tr(q[0])} (${i + 1}/${list.length})`, (i === 0 ? tr(intro) + '\n' : '') + tr(q[1]), opts.map(o => ({ t: o.t })), q[0] === 'Sếp' ? 'boss' : '');
+    const c = await choose(`${tr(q[0])} (${i + 1}/${list.length})`, (i === 0 ? tr(intro) + '\n' : '') + tr(q[1]), opts.map(o => ({ t: o.t })), (q[0] === 'Sếp' || q[0] === 'Chủ tịch') ? 'boss' : '');
     score += opts[c].s; opts[c].s >= 10 ? Aud.good() : opts[c].s >= 5 ? Aud.click() : Aud.bad(); await info('Kết quả', [opts[c].f], null, i === list.length - 1 ? 'Xong' : 'Tiếp');
   }
   return Math.round(score / (list.length * 10) * 100);
@@ -1529,7 +1541,7 @@ function sepProps() {
   box(SOL, 0x20303a, 7.1, 0.4, -3.6, 0.8, 0.8, 2.0); box(EMI, 0x4ab8e8, 6.7, 1.25, -3.6, 0.04, 0.7, 1.8); box(SOL, 0x20303a, 7.1, 1.7, -3.6, 0.8, 0.1, 2.0); for (let k = 0; k < 4; k++) box(EMI, 0xff9a3a, 6.66, 1.0 + (k % 2) * 0.35, -4.2 + k * 0.5, 0.02, 0.1, 0.18); addBox(6.7, 7.5, -4.7, -2.5);
 }
 
-function updateSrvBox() { $('srvBox').textContent = `🖥️ Server ${DEPT.name} · ${DEPT.size || 50}/${DEPT.size || 50}`; }
+function updateSrvBox() { { const ic = document.querySelector('#stats .st:nth-child(4) i'); if (ic) ic.textContent = isSep() ? '🎩' : '😎'; }$('srvBox').textContent = `🖥️ Server ${DEPT.name} · ${DEPT.size || 50}/${DEPT.size || 50}`; }
 function relabelWorld() { SIGNS.forEach(paintSign); STATIONS.forEach(s => s.paint && s.paint()); NPC.forEach(n => n.tag && paintTag(n.tag)); if (player.tag) paintTag(player.tag); }
 
 /* ---- Tình huống mới theo phòng ban (từ phần tìm hiểu chuyện hài các phòng) ---- */
@@ -1588,17 +1600,17 @@ const RANKS = [
 ];
 function computeSalary(resigned) {
   let sg = 0; for (let d = 1; d <= G.days; d++) sg += 45 + 5 * d;
-  const base = 7500000, bonus = resigned ? 0 : Math.round(clamp(G.kpiTotal / sg, 0, 1.2) * 2000000), ot = Math.round(G.otMin / 60 * 120000), fines = G.fines.reduce((a, f) => a + f.amount, 0), ins = Math.round(base * 0.105);
+  const K = isSep() ? 8 : 1, base = 7500000 * K, bonus = resigned ? 0 : Math.round(clamp(G.kpiTotal / sg, 0, 1.2) * 2000000) * K, ot = Math.round(G.otMin / 60 * 120000) * K, fines = G.fines.reduce((a, f) => a + f.amount, 0), ins = Math.round(base * 0.105);
   const net = base + bonus + ot - fines - ins;
-  const score = clamp((net - 5500000) / 4500000, 0, 1) * 45 + G.mood * 0.2 + G.boss * 0.15 + G.team * 0.15 + G.wins * 2 - (resigned ? 25 : 0);
-  const rank = resigned ? ['Đã nộp đơn nghỉ việc', 'Burnout chạm đáy. Hy vọng bạn tìm được công việc nhẹ nhàng hơn.'] : RANKS.find(r => score >= r[0]).slice(1);
+  const score = clamp((net / K - 5500000) / 4500000, 0, 1) * 45 + G.mood * 0.2 + G.boss * 0.15 + G.team * 0.15 + G.wins * 2 - (resigned ? 25 : 0);
+  const rank = resigned ? ['Đã nộp đơn nghỉ việc', 'Burnout chạm đáy. Hy vọng bạn tìm được công việc nhẹ nhàng hơn.'] : (isSep() ? RANKS_SEP : RANKS).find(r => score >= r[0]).slice(1);
   return { base, bonus, ot, fines, ins, net, score: Math.round(score), rank: rank[0], flavor: rank[1] };
 }
 let lastSalary = null;
 ACT.salary = async (resigned) => {
   setMode('activity'); player.pose = 'idle'; if (!resigned) { await playerGoto(-12.2, 8.9, 0, 0.5); focus('salary'); }
   const s = lastSalary = computeSalary(resigned === true);
-  await info('Kế toán', [resigned === true ? 'Kế toán: "Đây là bảng lương cuối cùng của em. Chúc em sức khỏe."' : 'Chị kế toán mỉm cười: "Lương kỳ này của em về rồi đây."']);
+  await info(SX('Kế toán', 'Kế toán trưởng', 'Chief accountant'), [resigned === true ? SX('Kế toán: "Đây là bảng lương cuối cùng của em. Chúc em sức khỏe."', 'Kế toán trưởng: "Đây là khoản thanh toán cuối cùng của anh. Chúc anh sức khỏe."', 'Chief accountant: "This is your final payment. Take care of yourself."') : SX('Chị kế toán mỉm cười: "Lương kỳ này của em về rồi đây."', 'Kế toán trưởng mỉm cười: "Bảng lương toàn công ty đã chốt, thu nhập của anh đây ạ."', 'The chief accountant smiles: "Payroll is closed. Here is your own income."')]);
   await new Promise(res => {
     ui('Phiếu lương', b => {
       const tb = h('table', 'slip', null, b); const row = (txt, val, cls) => { const tr = h('tr', cls || '', null, tb); h('td', '', txt, tr); h('td', '', val, tr); };
@@ -1613,7 +1625,7 @@ ACT.salary = async (resigned) => {
   await new Promise(res => {
     ui('Kết quả tuần làm việc', b => {
       const r = h('div', 'big', '🏆', b); h('div', 'say', `${s.rank}`, b).style.fontSize = '19px'; h('div', 'say', s.flavor, b);
-      h('div', 'say', `Điểm công sở: ${s.score} · Tâm trạng ${Math.round(G.mood)} · Sếp ưa ${Math.round(G.boss)} · Tình đồng nghiệp ${Math.round(G.team)}`, b);
+      h('div', 'say', isSep() ? VP(`Điểm điều hành: ${s.score} · Tâm trạng ${Math.round(G.mood)} · Uy tín ${Math.round(G.boss)} · Tinh thần nhân viên ${Math.round(G.team)}`, 'Leadership score: {} · Mood {} · Reputation {} · Staff morale {}', 'Điểm điều hành: {} · Tâm trạng {} · Uy tín {} · Tinh thần nhân viên {}') : `Điểm công sở: ${s.score} · Tâm trạng ${Math.round(G.mood)} · Sếp ưa ${Math.round(G.boss)} · Tình đồng nghiệp ${Math.round(G.team)}`, b);
       h('div', 'say', `Kỷ lục thực nhận: ${fmtMoney(save.best)} (${save.bestRank})`, b);
       const row = h('div', 'row', null, b); const sh = h('button', 'btn big', '📸 Chia sẻ ảnh', row), re = h('button', 'btn big', '🔁 Chơi lại', row);
       sh.addEventListener('click', () => { Aud.click(); openShare(s); }); re.addEventListener('click', () => location.reload());
@@ -1621,6 +1633,297 @@ ACT.salary = async (resigned) => {
   });
 };
 async function resign() { G.over = true; setMode('activity'); closePanel(); await info('Burnout', ['Tâm trạng của bạn chạm đáy. Bạn mở email, gõ một dòng ngắn: "Em xin nghỉ việc ạ."', 'Sếp trả lời đúng một chữ: "Ok."']); await ACT.salary(true); }
+
+/* ============ 8b. SERVER SẾP: người chơi là Tổng giám đốc, hoạt động đúng việc của sếp ============ */
+function isSep() { return !!DEPT && DEPT.id === 'sep'; }
+function V(vi, en) { if (EN_DATA[vi] !== en) { EN_DATA[vi] = en; trMemo.delete(vi); } return vi; }
+function SX(a, b, en) { if (en !== undefined) V(b, en); return isSep() ? b : a; }
+const _patDone = new Set();
+function VP(inst, en, pat) { if (!_patDone.has(pat)) { _patDone.add(pat); const esc = s => s.replace(/[.*+?^$()|[\]\\]/g, '\\$&'); EN_DATA[pat] = en; ENP.push({ len: pat.length, re: new RegExp('^' + pat.split('{}').map(esc).join('(.+?)') + '$'), tpl: en }); ENP.sort((a, b) => b.len - a.len); trMemo.clear(); } return inst; }
+
+V('Xong', 'Done'); V('Quay ra', 'Leave'); V('Kết thúc họp', 'End the meeting');
+const SEP_STN = {
+  checkin: { name: V('Vào công ty', 'Arrive at work'), icon: '🚗' },
+  files: { name: V('Ký duyệt hồ sơ', 'Sign documents'), icon: '✍️' },
+  desk: { name: V('Bàn Giám đốc', 'Executive desk'), icon: '💼' },
+  meeting: { name: V('Họp Ban lãnh đạo', 'Board meeting'), icon: '🧑‍💼' },
+  lunch: { name: V('Tiếp đối tác ăn trưa', 'Lunch with a partner'), icon: '🍽️' },
+  tea: { name: V('Gọi cà phê', 'Order coffee'), icon: '☕' },
+  ship: { name: V('Nhận cà phê', 'Collect the coffee'), icon: '🛵' },
+  gossip: { name: V('Đi thăm nhân viên', 'Walk the floor'), icon: '🚶' },
+  argue: { name: V('Đánh golf với đối tác', 'Golf with a partner'), icon: '⛳', x: -11, z: 7.7, face: 2.3 },
+  boss: { name: V('Phòng Chủ tịch', 'Chairman\'s office'), icon: '🎩' },
+  nap: { name: V('Ghế massage', 'Massage chair'), icon: '💆' },
+  salary: { name: V('Duyệt bảng lương', 'Approve payroll'), icon: '📑' }
+};
+function applyStationSet() {
+  STATIONS.forEach(s => { if (!s.o) s.o = { name: s.name, icon: s.icon, x: s.x, z: s.z, face: s.face }; Object.assign(s, s.o); if (isSep() && SEP_STN[s.id]) Object.assign(s, SEP_STN[s.id]); });
+  if (!CAMS._argue0) CAMS._argue0 = CAMS.argue; CAMS.argue = isSep() ? [-8.0, 2.3, 9.8, -10.8, 0.5, 6.0] : CAMS._argue0;
+}
+const SEP_PEN = {
+  checkin() { applyFx({ boss: -8, team: -4 }); toast(V('Tổng giám đốc đến muộn, nhân viên xì xào cả sáng.', 'The CEO arrived late and the staff whispered all morning.')); },
+  meeting() { applyFx({ boss: -10, team: -4 }); toast(V('Họp Ban mà vắng Giám đốc, ai cũng nhìn đồng hồ.', 'The board met without you. Everyone kept checking the clock.')); },
+  files() { applyFx({ kpi: -5, boss: -4 }); toast(V('Hồ sơ chờ ký chất thành chồng, thư ký lo lắng ra mặt.', 'Unsigned documents are piling up. Your secretary looks worried.')); },
+  kpi() { applyFx({ boss: -8, mood: -5 }); toast(V('Chưa đạt mục tiêu điều hành hôm nay. Chủ tịch nhíu mày.', 'Today\'s management target was missed. The Chairman frowns.')); },
+  lunch() { applyFx({ energy: -12, mood: -6, boss: -3 }); toast(V('Bạn lỡ hẹn ăn trưa, đối tác chờ mãi rồi ra về.', 'You missed the lunch. The partner waited, then left.')); },
+  req() { applyFx({ boss: -6, team: -6 }); toast(V('Phó tổng chờ chỉ đạo mãi, đành tự quyết định.', 'The deputy waited for your decision, then decided alone.')); reqClose(); },
+  scold() { applyFx({ boss: -10, mood: -5 }); toast(V('Chủ tịch nhắn cả đoạn dài vì bạn không vào phòng.', 'The Chairman sent a long message because you did not show up.')); G.flags.summoned = false; }
+};
+const TYPE_SEP = [
+  V('Kính gửi các anh chị, tuần này ưu tiên hàng đầu là hoàn tất kế hoạch quý sau.', 'Dear colleagues, this week the top priority is finalizing next quarter\'s plan.'),
+  V('Đề nghị các phòng gửi báo cáo ngân sách trước thứ Sáu.', 'All departments are asked to submit budget reports by Friday.'),
+  V('Tôi đồng ý với đề xuất, mời phòng Kế toán triển khai ngay.', 'I approve the proposal. Accounting, please proceed at once.'),
+  V('Mọi chi phí vượt dự toán cần báo cáo trước khi thực hiện.', 'Any spending above budget must be reported before it is made.'),
+  V('Cảm ơn tập thể đã nỗ lực hoàn thành mục tiêu tháng này.', 'Thank you all for the effort in reaching this month\'s target.'),
+  V('Đề nghị phòng Nhân sự rà soát lại chỉ tiêu tuyển dụng.', 'HR is asked to review the hiring targets.'),
+  V('Cuộc họp chiều nay dời sang 15 giờ, mong mọi người sắp xếp.', 'This afternoon\'s meeting moves to 3 PM. Please adjust your schedules.'),
+  V('Tôi chưa duyệt, đề nghị bổ sung thêm số liệu so sánh.', 'I have not approved this yet. Please add comparison figures.'),
+  V('Ban lãnh đạo ủng hộ phương án này, mời các bộ phận phối hợp.', 'The board supports this plan. All units, please coordinate.'),
+  V('Chúc cả công ty một tuần làm việc hiệu quả và nhiều niềm vui.', 'Wishing the whole company a productive and joyful week.')
+];
+const DR_SEP = [{ t: V('Cà phê muối', 'Salted coffee'), p: 39000, icon: '☕' }, { t: V('Espresso đôi', 'Double espresso'), p: 45000, icon: '⚡' }, { t: V('Trà shan tuyết', 'Shan tuyet tea'), p: 55000, icon: '🍵' }, { t: V('Cà phê sữa đá', 'Iced milk coffee'), p: 32000, icon: '🧊' }];
+const SCOLD_SEP = [
+  V('Lợi nhuận quý này thấp hơn đối thủ, anh giải thích thế nào?', 'Our profit this quarter is below our rival\'s. How do you explain that?'),
+  V('Hội đồng quản trị đang rất sốt ruột về tiến độ dự án mở rộng.', 'The Board is very impatient about the expansion project.'),
+  V('Tôi nghe nói có hai phó tổng đang không hợp nhau. Anh biết chưa?', 'I hear two deputies are at odds. Do you know about it?'),
+  V('Chi phí tiếp khách tháng này cao bất thường.', 'Entertainment costs this month are unusually high.'),
+  V('Hồi tôi bằng tuổi anh, tôi đã mở xong hai chi nhánh.', 'At your age, I had already opened two branches.'),
+  V('Thôi, về xem lại toàn bộ kế hoạch rồi trình lại tôi.', 'Go back, review the whole plan and present it to me again.')
+];
+VP('Chủ tịch: x', 'Chairman: {}', 'Chủ tịch: {}');
+const RANKS_SEP = [
+  [85, V('Nhà lãnh đạo xuất sắc', 'Outstanding leader'), V('Ban lãnh đạo tin tưởng, nhân viên nể phục, cổ đông mỉm cười.', 'The board trusts you, staff admire you and shareholders smile.')],
+  [70, V('Tổng giám đốc đáng tin cậy', 'A CEO you can count on'), V('Cân bằng được lợi nhuận, con người và những ly cà phê.', 'You balanced profit, people and coffee.')],
+  [55, V('Điều hành vững vàng', 'Steady at the helm'), V('Một tuần nhiều sóng gió nhưng con thuyền vẫn đi đúng hướng.', 'A stormy week, but the ship stayed on course.')],
+  [40, V('Sếp cá mặn', 'The salted-fish boss'), V('Không xuất sắc, không tệ, chỉ lặng lẽ ký giấy cho hết ngày.', 'Neither brilliant nor bad, just quietly signing papers until closing time.')],
+  [0, V('Cần một kỳ nghỉ gấp', 'In urgent need of a holiday'), V('Họp nhiều, ký nhiều, ngủ ít. Hãy ra sân golf và đừng mang điện thoại.', 'Too many meetings, too many signatures, too little sleep. Go play golf and leave the phone behind.')]
+];
+const _o = (t, s, fx, r) => ({ t, s, fx, r });
+const MEET_SEP = [
+  { b: V('CFO: Quý này chi phí marketing vượt dự toán 20%. Tôi đề nghị cắt giảm ngân sách quý sau.', 'CFO: Marketing spending ran 20% over budget this quarter. I propose cutting next quarter\'s budget.'), o: [
+    _o(V('Yêu cầu CMO giải trình rồi quyết dựa trên hiệu quả từng kênh.', 'Ask the CMO to explain, then decide channel by channel on results.'), V('Công bằng, tốn thêm thời gian', 'Fair, takes more time'), { boss: 3, team: 3, kpi: 4 }, V('CMO trình số liệu, Ban nhất trí cắt kênh kém hiệu quả và giữ kênh tốt.', 'The CMO presents numbers; the board agrees to cut weak channels and keep strong ones.')),
+    _o(V('Cắt luôn 20% cho gọn.', 'Just cut 20% across the board.'), V('Nhanh, dễ gây bất mãn', 'Quick, but breeds resentment'), { boss: 1, team: -5, kpi: 3 }, V('CFO hài lòng, CMO im lặng nhìn bạn.', 'The CFO is pleased; the CMO stares at you in silence.')),
+    _o(V('Hoãn sang quý sau bàn tiếp.', 'Postpone it to next quarter.'), V('An toàn, không giải quyết gì', 'Safe, solves nothing'), { boss: -3, kpi: -1 }, V('Vấn đề vẫn nằm đó, CFO thở dài.', 'The problem is still there. The CFO sighs.'))] },
+  { b: V('COO: Nhà cung cấp chính vừa báo giao hàng chậm hai tuần, khách đang chờ.', 'COO: Our main supplier just announced a two-week delay, and customers are waiting.'), o: [
+    _o(V('Yêu cầu tìm nhà cung cấp dự phòng và báo khách chủ động.', 'Line up a backup supplier and tell customers proactively.'), V('Chủ động, tốn công', 'Proactive, more effort'), { boss: 3, kpi: 5, team: 1 }, V('Khách hơi phiền lòng nhưng đánh giá cao sự chủ động.', 'Customers are a little annoyed but value the transparency.')),
+    _o(V('Chờ thêm vài ngày xem nhà cung cấp có giữ lời không.', 'Wait a few days to see if the supplier keeps its word.'), V('Hy vọng may mắn', 'Hoping for luck'), { boss: -2, kpi: 1 }, V('Hai ngày sau họ báo chậm thêm một tuần nữa.', 'Two days later they announce another week of delay.')),
+    _o(V('Hủy hợp đồng ngay lập tức.', 'Cancel the contract immediately.'), V('Dứt khoát, rủi ro cao', 'Decisive, high risk'), { boss: -3, kpi: -2, team: -1 }, V('Bạn vừa mất nhà cung cấp mà chưa có người thay.', 'You just lost a supplier with no replacement.'))] },
+  { b: V('CHRO: Hai phòng cùng xin tuyển thêm người, nhưng chỉ còn một chỉ tiêu nhân sự.', 'CHRO: Two departments want to hire, but only one headcount remains.'), o: [
+    _o(V('Xem khối lượng việc thực tế của từng phòng rồi quyết theo số liệu.', 'Compare each department\'s real workload and decide by the data.'), V('Công tâm, cần thời gian', 'Impartial, needs time'), { boss: 3, team: 3, kpi: 3 }, V('Cả hai phòng chấp nhận vì tiêu chí rõ ràng.', 'Both departments accept it because the criteria are clear.')),
+    _o(V('Chia đôi: mỗi phòng một nhân sự thời vụ.', 'Split it: one temp worker for each.'), V('Thỏa hiệp', 'A compromise'), { team: 1, kpi: 1 }, V('Không ai hài lòng hẳn, nhưng chẳng ai phản đối.', 'Nobody is fully happy, but nobody objects.')),
+    _o(V('Ưu tiên phòng của người bạn quen.', 'Favor the department of someone you know.'), V('Nhanh, nhưng khó giữ kín', 'Fast, but hard to keep quiet'), { boss: -5, team: -6 }, V('Tin đồn lan nhanh hơn cả email.', 'The rumor spreads faster than an email.'))] },
+  { b: V('CTO: Hệ thống cần bảo trì bốn tiếng. Làm ban ngày thì gián đoạn, làm ban đêm tốn gấp đôi.', 'CTO: The system needs four hours of maintenance. Daytime means disruption; night work costs double.'), o: [
+    _o(V('Làm ban đêm và trả phụ cấp cho đội kỹ thuật.', 'Do it at night and pay the tech team an allowance.'), V('Tốn tiền, êm việc', 'Costs money, runs smoothly'), { team: 4, boss: 2, kpi: 2, mood: -1 }, V('Hệ thống chạy mượt, đội kỹ thuật nhận phụ cấp mà cười.', 'Everything runs smoothly and the tech team smiles at the allowance.')),
+    _o(V('Làm ban ngày, báo trước cho toàn công ty.', 'Do it by day, with advance notice to everyone.'), V('Tiết kiệm, gián đoạn', 'Cheaper, disruptive'), { team: -2, kpi: -2, boss: 1 }, V('Cả công ty ngồi đợi, rồi lấy điện thoại ra lướt.', 'The whole company waits around, then starts scrolling their phones.')),
+    _o(V('Làm luôn lúc cao điểm cho nhanh.', 'Do it at peak hours to get it over with.'), V('Liều', 'Reckless'), { boss: -6, team: -3, kpi: -4 }, V('Hệ thống sập đúng lúc khách quan trọng gọi tới.', 'The system goes down just as a key client calls.'))] },
+  { b: V('Chủ tịch: Anh trình bày kế hoạch mở rộng sang miền Trung đi. Rủi ro ở đâu?', 'Chairman: Present the plan to expand into central Vietnam. Where are the risks?'), o: [
+    _o(V('Nêu rõ rủi ro và đề xuất thí điểm một chi nhánh trước.', 'Lay out the risks and propose piloting one branch first.'), V('Cẩn trọng, có tầm nhìn', 'Prudent and far-sighted'), { boss: 5, kpi: 5 }, V('Chủ tịch gật đầu: "Cẩn trọng và có tầm nhìn."', 'The Chairman nods: "Careful, and with vision."')),
+    _o(V('Tự tin nói rằng mọi thứ sẽ ổn.', 'Say confidently that everything will be fine.'), V('Lạc quan', 'Optimistic'), { boss: 1, kpi: 2, mood: -2 }, V('Chủ tịch hỏi: "Chắc chưa?" Bạn nuốt nước bọt.', 'The Chairman asks: "Are you sure?" You swallow hard.')),
+    _o(V('Xin thêm thời gian vì chưa đọc kỹ.', 'Ask for more time because you have not read it closely.'), V('Thành thật, mất điểm', 'Honest, but costs credibility'), { boss: -5, mood: -2 }, V('Chủ tịch nhìn bạn rất lâu.', 'The Chairman looks at you for a very long time.'))] },
+  { b: V('CMO: Một influencer đề nghị quảng cáo miễn phí nhưng muốn toàn quyền về nội dung.', 'CMO: An influencer offers free promotion but wants full control of the content.'), o: [
+    _o(V('Thống nhất khung nội dung, duyệt bản trước khi đăng.', 'Agree on a content framework and review before posting.'), V('Có kiểm soát', 'Controlled'), { boss: 3, kpi: 4, team: 2 }, V('Chiến dịch lên sóng đúng thông điệp, lượng tương tác tăng vọt.', 'The campaign airs on message and engagement soars.')),
+    _o(V('Từ chối cho an toàn.', 'Decline to be safe.'), V('An toàn', 'Safe'), { boss: -1, kpi: -1 }, V('An toàn, nhưng đối thủ nhận lời ngay chiều hôm đó.', 'Safe, but a rival accepts that same afternoon.')),
+    _o(V('Đồng ý toàn quyền, miễn là nổi tiếng.', 'Give full control as long as it goes viral.'), V('Mạo hiểm', 'Risky'), { boss: -6, team: -3, kpi: -2 }, V('Bài đăng đầu tiên khiến phòng Pháp chế mất ngủ.', 'The first post keeps the Legal department awake all night.'))] }
+];
+async function sepNap() {
+  player.pose = 'sleep';
+  const i = await choose(V('Ghế massage', 'Massage chair'), V('Ngả lưng ra ghế massage trong phòng, nhắm mắt một chút. Nghỉ bao lâu?', 'Lean back in your massage chair and close your eyes. For how long?'), [{ t: V('😌 Chợp mắt 15 phút', '😌 A 15-minute doze'), s: V('Hồi ít năng lượng, ít rủi ro', 'A little energy, low risk') }, { t: V('😴 Nghỉ 30 phút', '😴 A 30-minute rest'), s: V('Hồi nhiều, dễ bị đánh thức', 'More energy, might be interrupted') }, { t: V('Thôi, làm tiếp', 'No, keep working') }]);
+  player.pose = 'sit'; if (i === 2) { await endActivity(0); return; }
+  const mins = i === 0 ? 15 : 30, surprise = Math.random() < (i === 0 ? 0.15 : 0.4);
+  if (surprise) { const fx = { energy: i === 0 ? 6 : 10, boss: -4, mood: -2 }; applyFx(fx); await info(V('Khách đến sớm!', 'An early guest!'), [V('Thư ký gõ cửa: "Đối tác đã tới sớm ba mươi phút ạ!"', 'Your secretary knocks: "The partner arrived thirty minutes early!"'), V('Bạn bật dậy, chỉnh lại cà vạt và cố tỏ ra như vừa họp xong.', 'You jump up, straighten your tie and try to look like you just left a meeting.')], fx); }
+  else { const fx = { energy: i === 0 ? 14 : 28, mood: i === 0 ? 3 : 7 }; applyFx(fx); await info(V('Tỉnh táo hẳn', 'Fully refreshed'), [V('Chiếc ghế rung nhè nhẹ, đầu óc nhẹ tênh. Quyết định tiếp theo chắc sẽ sáng suốt hơn.', 'The chair hums softly and your head clears. The next decision should be wiser.')], fx); }
+  await endActivity(mins, V('Chiếc ghế massage rung nhè nhẹ…', 'The massage chair hums softly…'));
+}
+
+const _checkin0 = ACT.checkin;
+ACT.checkin = async () => {
+  if (!isSep()) return _checkin0();
+  focus('checkin'); const late = G.T > 510;
+  const i = await choose(V('Bước vào công ty', 'Arriving at the office'), late ? V('Đã quá 8:30. Nhân viên đứng dậy chào, nhưng ai cũng liếc đồng hồ.', 'It is past 8:30. Staff stand to greet you, but everyone glances at the clock.') : V('Sảnh công ty. Lễ tân và nhân viên đứng dậy chào buổi sáng.', 'The lobby. The receptionist and staff stand to say good morning.'), [
+    { t: V('🤝 Dừng lại, chào hỏi từng người', '🤝 Stop and greet people one by one'), s: V('Mất vài phút, nhân viên có thiện cảm', 'Takes a few minutes, staff warm to you') },
+    { t: V('🙂 Gật đầu chào chung rồi vào thang máy', '🙂 Nod to everyone and take the elevator'), s: V('Gọn gàng, đúng phong cách', 'Neat and in character') },
+    { t: V('📱 Vừa đi vừa nghe điện thoại, không nhìn ai', '📱 Take a call and walk past everyone'), s: V('Tiết kiệm thời gian, hơi lạnh lùng', 'Saves time, a bit cold'), c: 'danger' }]);
+  doneTask('checkin');
+  const R = [[{ team: 6, mood: 3, boss: 2 }, V('Chị lễ tân cười tươi, cả sảnh bỗng nhẹ đi một nửa.', 'The receptionist beams and the whole lobby relaxes.'), 6], [{ boss: 2, mood: 1 }, V('Mọi người gật đầu đáp lễ, thang máy đến đúng lúc.', 'Everyone nods back; the elevator arrives right on time.'), 2], [{ team: -4, mood: 1, boss: 1 }, V('Bạn nói chuyện điện thoại suốt, nhân viên nhìn theo, không ai dám chào lại.', 'You stay on the phone the whole way; staff watch you pass in silence.'), 1]];
+  const fx = Object.assign({}, R[i][0]); if (late) fx.boss = (fx.boss || 0) - 4;
+  applyFx(fx); (fx.boss || 0) >= 0 ? Aud.beep() : Aud.bad();
+  await info(V('Vào công ty', 'At the office'), [R[i][1], late ? V('Bạn đến hơi muộn, vài nhân viên khẽ liếc đồng hồ.', 'You arrived a little late; a few staff glance at the clock.') : ''].filter(Boolean), fx);
+  await endActivity(R[i][2]);
+};
+
+const D = (t, te, n, ne, ans) => [V(t + '\n' + n, te + '\n' + ne), ans];
+const SIGN_DOCS = [
+  D('Hợp đồng cung ứng 3 năm', '3-year supply contract', 'Đã qua Pháp chế và CFO thẩm định, đủ chữ ký các bên.', 'Reviewed by Legal and the CFO, all parties have signed.', 0),
+  D('Đề xuất mua 30 ghế massage', 'Proposal to buy 30 massage chairs', 'Không có báo giá so sánh, không nêu nguồn ngân sách.', 'No comparative quotes and no budget source.', 1),
+  D('Phiếu chi 800 triệu đồng', 'Payment voucher for 800 million VND', 'Thiếu chữ ký của Kế toán trưởng.', 'The chief accountant\'s signature is missing.', 1),
+  D('Đơn nghỉ phép của trưởng phòng', 'Department head leave request', 'Nghỉ hai ngày, đã bàn giao việc và có người thay thế.', 'Two days off, handover done and a replacement arranged.', 0),
+  D('Thư bổ nhiệm giám đốc chi nhánh', 'Branch manager appointment letter', 'Ứng viên chưa qua vòng phỏng vấn của nhân sự.', 'The candidate has not passed the HR interview.', 1),
+  D('Hợp đồng quảng cáo với KOL', 'KOL advertising contract', 'Có điều khoản phạt 5 tỷ nếu hủy trước hạn, Pháp chế chưa xem.', 'Contains a 5 billion VND penalty for early cancellation; Legal has not seen it.', 2),
+  D('Kế hoạch tiệc cuối năm', 'Year-end party plan', 'Nằm trong ngân sách đã duyệt, địa điểm và thực đơn đầy đủ.', 'Within the approved budget, venue and menu fully detailed.', 0),
+  D('Quyết định sa thải một nhân viên', 'Decision to dismiss an employee', 'Chưa có biên bản vi phạm nào kèm theo.', 'No record of any violation is attached.', 2)
+];
+const SIGN_SC = [[10, 4, 0], [0, 10, 5], [0, 5, 10]];
+const _files0 = ACT.files;
+ACT.files = async () => {
+  if (!isSep()) return _files0();
+  focus('files'); const docs = shuffle(SIGN_DOCS.slice()).slice(0, 5); let total = 0;
+  const opts = [{ t: V('✍️ Ký duyệt', '✍️ Approve and sign') }, { t: V('↩️ Trả lại, yêu cầu bổ sung', '↩️ Return for more information') }, { t: V('🚫 Từ chối', '🚫 Reject') }];
+  for (let i = 0; i < docs.length; i++) {
+    const c = await choose(VP(`Hồ sơ ${i + 1}/${docs.length}`, 'Document {}/{}', 'Hồ sơ {}/{}'), docs[i][0], opts), sc = SIGN_SC[docs[i][1]][c]; total += sc;
+    sc >= 10 ? Aud.good() : sc >= 5 ? Aud.click() : Aud.bad();
+    await info(V('Quyết định', 'Your call'), [sc >= 10 ? V('Quyết định đúng. Thư ký ghi nhận và chuyển hồ sơ đi.', 'The right call. Your secretary logs it and sends the file on.') : sc >= 4 ? V('Chưa tối ưu nhưng không gây hại, hồ sơ được xử lý tiếp.', 'Not ideal, but harmless. The file moves on.') : V('Quyết định này chắc sẽ để lại hậu quả về sau.', 'This decision will probably come back to haunt you.')], null, i === docs.length - 1 ? 'Xong' : 'Tiếp');
+  }
+  const ratio = total / (docs.length * 10), fx = { kpi: Math.round(ratio * 18), boss: ratio >= 0.8 ? 4 : ratio < 0.4 ? -6 : 0, team: ratio < 0.4 ? -2 : 0, mood: ratio < 0.4 ? -3 : 1, energy: -4 };
+  applyFx(fx); doneTask('files');
+  await info(V('Xong hồ sơ', 'Documents done'), [ratio >= 0.8 ? V('Chồng hồ sơ được xử lý gọn gàng. Thư ký gật đầu nể phục.', 'The stack is cleared neatly. Your secretary nods in respect.') : ratio >= 0.4 ? V('Có vài quyết định chưa chắc tay, nhưng công việc vẫn trôi.', 'A few shaky decisions, but work keeps flowing.') : V('Nhiều quyết định sai, kiểu gì tuần sau cũng có người tới giải trình.', 'Too many wrong calls. Someone will come to explain themselves next week.')], fx);
+  await endActivity(20);
+};
+
+const _lunch0 = ACT.lunch;
+ACT.lunch = async () => {
+  if (!isSep()) return _lunch0();
+  focus('lunch');
+  const O = [
+    { t: V('🍽️ Nhà hàng sang trọng', '🍽️ Upscale restaurant'), s: V('1.500.000đ · gây ấn tượng mạnh', '1,500,000đ · makes a strong impression'), fx: { money: -1500000, energy: 6, mood: 5, boss: 5, kpi: 8 }, r: V('Đối tác tấm tắc khen không gian và món ăn. Chuyện làm ăn trôi chảy sau ly rượu đầu tiên.', 'The partner praises the setting and the food. Business talk flows after the first glass.'), m: 75 },
+    { t: V('🍜 Quán quen thân mật', '🍜 A familiar, relaxed place'), s: V('400.000đ · dễ nói chuyện thật lòng', '400,000đ · easy to talk honestly'), fx: { money: -400000, energy: 10, mood: 7, boss: 3, kpi: 5 }, r: V('Bữa trưa giản dị, nhưng hai bên nói chuyện cởi mở hơn cả buổi họp.', 'A simple lunch, yet the two of you speak more openly than in any meeting.'), m: 55 },
+    { t: V('🥗 Mời ăn tại căng tin công ty', '🥗 Host them in the company canteen'), s: V('150.000đ · tiết kiệm, hơi mộc', '150,000đ · thrifty, a bit plain'), fx: { money: -150000, energy: 6, mood: 0, boss: -1, kpi: 2, team: 4 }, r: V('Đối tác hơi bất ngờ, nhưng nhân viên rất thích thấy sếp ăn chung căng tin.', 'The partner is a little surprised, but staff love seeing the boss in the canteen.'), m: 40 },
+    { t: V('Hủy hẹn, ăn tại bàn làm việc', 'Cancel and eat at your desk'), s: V('Mất lòng đối tác', 'Offends the partner'), c: 'danger', fx: { energy: 2, mood: -4, boss: -6, kpi: -3 }, r: V('Đối tác nhận tin nhắn hủy hẹn, và ghi nhớ điều đó rất lâu.', 'The partner receives your cancellation and remembers it for a long time.'), m: 15 }];
+  const i = await choose(V('Tiếp đối tác ăn trưa', 'Lunch with a partner'), V('Một đối tác lớn của công ty ghé thăm hôm nay. Bạn mời họ đi ăn ở đâu?', 'A major partner is visiting today. Where do you take them?'), O.map(o => ({ t: o.t, s: o.s, c: o.c }))), o = O[i];
+  G.flags.ate = i < 3; doneTask('lunch'); applyFx(o.fx); Aud.slurp();
+  await info(V('Bữa trưa xong', 'Lunch finished'), [o.r], o.fx);
+  await endActivity(o.m, V('Bữa trưa kéo dài hơn dự kiến…', 'The lunch runs longer than planned…'));
+};
+
+const WALK = [
+  { b: V('Một nhân viên mới đang loay hoay với bảng tính, thấy bạn đến thì luống cuống đứng dậy.', 'A new employee is struggling with a spreadsheet and scrambles to stand when you approach.'), o: [
+    _o(V('Bảo bạn ấy ngồi xuống, hỏi khó ở đâu và nhờ người giỏi hướng dẫn.', 'Tell them to sit, ask what is hard and arrange a mentor.'), 0, { team: 5, mood: 3, boss: 2 }, V('Bạn ấy thở phào, còn đồng nghiệp xung quanh nhìn bạn bằng con mắt khác.', 'They exhale in relief, and colleagues around look at you differently.')),
+    _o(V('Nói "cố lên nhé" rồi đi tiếp.', 'Say "keep it up" and walk on.'), 0, { team: 1 }, V('Bạn ấy cười gượng, quay lại bảng tính… vẫn bí.', 'They smile awkwardly and go back to the spreadsheet, still stuck.')),
+    _o(V('Hỏi thẳng: "Sao giờ vẫn chưa xong?"', 'Ask bluntly: "Why isn\'t this finished yet?"'), 0, { team: -5, mood: -1 }, V('Bạn ấy run tay, gõ nhầm cả cột số.', 'Their hands shake and they mistype a whole column.'))] },
+  { b: V('Hai nhân viên đang ăn vặt ở góc phòng, thấy sếp liền giấu vội túi bim bim ra sau lưng.', 'Two employees are snacking in a corner; seeing the boss, they hide the chips behind their backs.'), o: [
+    _o(V('Cười: "Cứ ăn đi, nhớ chia cho sếp một miếng."', 'Smile: "Go on, just save me a bite."'), 0, { team: 6, mood: 4 }, V('Cả góc phòng cười ồ lên, bịch bim bim được chuyền tay.', 'The corner bursts out laughing and the bag is passed around.')),
+    _o(V('Giả vờ không thấy.', 'Pretend not to notice.'), 0, { team: 1 }, V('Hai bạn thở phào, nhưng vẫn không dám mở túi.', 'They sigh in relief but still don\'t dare open the bag.')),
+    _o(V('Nhắc nhở nghiêm khắc về nội quy.', 'Sternly remind them of the rules.'), 0, { team: -5, boss: 1 }, V('Hai bạn cúi đầu xin lỗi, không khí đóng băng.', 'They bow their heads and apologize; the air freezes.'))] },
+  { b: V('Trưởng nhóm kỹ thuật than dự án đang chậm vì thiếu hai người.', 'The tech team lead complains that the project is late because two people are missing.'), o: [
+    _o(V('Hỏi rõ nguyên nhân, hứa xem xét nhân sự và hẹn ngày trả lời.', 'Ask for details, promise to review staffing and set a date for an answer.'), 0, { team: 4, boss: 2, kpi: 3 }, V('Anh ấy thấy được lắng nghe, và hạn chót có vẻ khả thi hơn.', 'He feels heard, and the deadline looks more achievable.')),
+    _o(V('Bảo "cố gắng xoay xở nhé".', 'Say "try to manage somehow".'), 0, { team: -2, kpi: 1 }, V('Anh ấy gật đầu, nhưng ánh mắt thì không.', 'He nods, but his eyes say otherwise.')),
+    _o(V('Trách: "Đã bảo lập kế hoạch kỹ rồi cơ mà."', 'Scold: "I told you to plan carefully."'), 0, { team: -6, boss: -1 }, V('Cả nhóm im lặng và cắm cúi vào màn hình.', 'The whole team goes quiet and buries itself in their screens.'))] },
+  { b: V('Một nhân viên lâu năm ngại ngùng đưa ý kiến cải tiến quy trình, viết tay trên giấy nháp.', 'A long-serving employee shyly hands you a handwritten idea for improving a process.'), o: [
+    _o(V('Đọc kỹ, cảm ơn và hẹn một buổi họp ngắn để cùng triển khai.', 'Read it carefully, thank them and set up a short meeting to implement it.'), 0, { team: 6, kpi: 4, boss: 2 }, V('Mắt anh ấy sáng lên. Hôm sau có thêm ba ý kiến nữa được gửi tới.', 'His eyes light up. Three more ideas arrive the next day.')),
+    _o(V('Nhận giấy, hứa sẽ xem sau.', 'Take the paper and promise to look later.'), 0, { team: -1 }, V('Tờ giấy nằm dưới đáy ngăn kéo suốt một tháng.', 'The paper sits at the bottom of a drawer for a month.')),
+    _o(V('Bảo gửi email đúng quy trình rồi đi tiếp.', 'Tell them to email it through the proper channel and move on.'), 0, { team: -3 }, V('Anh ấy gật đầu và không bao giờ gửi email đó.', 'He nods and never sends that email.'))] }
+];
+WALK.forEach(w => w.o.forEach((o, k) => { o.sc = [10, 5, 0][k]; o.s = undefined; }));
+const _gossip0 = ACT.gossip;
+ACT.gossip = async () => {
+  if (!isSep()) return _gossip0();
+  if (G.flags.gossipCool > G.T) { await info(V('Đi thăm nhân viên', 'Walking the floor'), [V('Bạn vừa đi một vòng xong. Đi nữa thì nhân viên sẽ tưởng có chuyện.', 'You just made a round. Another one and staff will think something is wrong.')]); await endActivity(0); return; }
+  focus('gossip');
+  const st = await choose(V('Đi thăm nhân viên', 'Walking the floor'), V('Đi một vòng các phòng ban, hỏi thăm công việc và nghe góp ý trực tiếp.', 'Make a round of the departments and hear feedback first-hand.'), [{ t: V('Đi một vòng', 'Take a stroll') }, { t: V('Để lúc khác', 'Another time') }]);
+  if (st === 1) { await endActivity(0); return; }
+  const sc = shuffle(WALK.slice()).slice(0, 3);
+  for (let k = 0; k < sc.length; k++) {
+    const os = shuffle(sc[k].o.slice()), c = await choose(VP(`Ghé thăm ${k + 1}/${sc.length}`, 'Visit {}/{}', 'Ghé thăm {}/{}'), sc[k].b, os.map(o => ({ t: o.t }))), o = os[c];
+    applyFx(o.fx); o.sc >= 10 ? Aud.good() : o.sc >= 5 ? Aud.click() : Aud.bad();
+    await info(V('Phản ứng', 'Reaction'), [o.r], o.fx, k === sc.length - 1 ? V('Xong vòng', 'Finish the round') : V('Đi tiếp', 'Keep walking'));
+  }
+  G.flags.gossipCool = G.T + 120; await endActivity(25, V('Một vòng quanh các phòng ban…', 'A round of the departments…'));
+};
+
+const _argue0 = ACT.argue;
+ACT.argue = async () => {
+  if (!isSep()) return _argue0();
+  focus('argue'); player.pose = 'idle'; G.flags.golfed = true; let pts = 0;
+  for (let k = 1; k <= 3; k++) {
+    const d = await new Promise(res => {
+      ui(VP(`Cú đánh ${k}/3`, 'Swing {}/3', 'Cú đánh {}/{}'.replace('/{}', '/3')), b => {
+        h('div', 'say', k === 1 ? V('Đối tác đứng cạnh quan sát. Bấm "Vung gậy!" khi vạch trắng nằm trong vùng xanh để bóng lăn sát lỗ.', 'Your partner watches. Press "Swing!" when the white marker is inside the green zone so the ball rolls close to the hole.') : V('Cú tiếp theo, tập trung nào!', 'Next swing, focus!'), b);
+        const sc = h('div', 'scan', null, b), z = h('div', 'zone', null, sc), mk = h('div', 'mk', null, sc), zw = 26 - k * 4, zl = rnd(12, 62); z.style.left = zl + '%'; z.style.width = zw + '%';
+        const t0 = performance.now(); let pos = 0; const iv = setInterval(() => { pos = 50 + 50 * Math.sin((performance.now() - t0) / 1000 * (2.4 + k * 0.6)); mk.style.left = `calc(${pos}% - 3px)`; }, 16);
+        const btn = h('button', 'btn big', V('⛳ Vung gậy!', '⛳ Swing!'), b); btn.style.width = '100%';
+        btn.addEventListener('click', () => { clearInterval(iv); res(Math.abs(pos - (zl + zw / 2)) / (zw / 2)); });
+      });
+    });
+    const p = d <= 0.5 ? 10 : d <= 1 ? 7 : d <= 1.8 ? 3 : 0; pts += p; p >= 7 ? Aud.good() : p ? Aud.click() : Aud.bad();
+    toast(p >= 10 ? V('Bóng bay thẳng, lăn sát lỗ!', 'Straight shot, rolling right up to the hole!') : p >= 7 ? V('Cú đánh đẹp!', 'Nice shot!') : p ? V('Hơi lệch, bóng dừng giữa đường.', 'A little off. The ball stops halfway.') : V('Trượt! Bóng lăn xuống hố cát.', 'Miss! The ball rolls into the sand trap.'), 1600);
+  }
+  let fx, r, ti;
+  if (pts >= 24) { fx = { mood: 12, boss: 6, kpi: 10, energy: -6 }; ti = V('Xuất sắc!', 'Outstanding!'); r = V('Đối tác vỗ tay và ngỏ ý ký hợp đồng ngay trên sân.', 'The partner applauds and offers to sign the contract right on the green.'); }
+  else if (pts >= 12) { fx = { mood: 7, boss: 3, kpi: 5, energy: -6 }; ti = V('Một buổi chiều dễ chịu', 'A pleasant afternoon'); r = V('Hai bên trò chuyện thoải mái, đối tác hứa sẽ gọi lại tuần sau.', 'A relaxed chat; the partner promises to call back next week.'); }
+  else { fx = { mood: 3, kpi: 1, energy: -8, boss: -1 }; ti = V('Ngày không may mắn', 'Not your day'); r = V('Bóng đáp xuống hồ nước. Đối tác an ủi: "Ai cũng có ngày như vậy."', 'The ball lands in the pond. Your partner consoles you: "Everyone has days like this."'); }
+  applyFx(fx); await info(ti, [r], fx); await endActivity(75, V('Một buổi chiều trên sân golf…', 'An afternoon on the golf course…'));
+};
+
+const _salary0 = ACT.salary;
+ACT.salary = async (resigned) => {
+  if (isSep() && resigned !== true && !G.paid) {
+    setMode('activity'); player.pose = 'idle'; await playerGoto(-12.2, 8.9, 0, 0.5); focus('salary');
+    const i = await choose(V('Duyệt bảng lương', 'Approve payroll'), V('Kế toán trưởng: "Thưa Giám đốc, bảng lương cả công ty đã sẵn sàng. Có đề xuất thưởng nóng 5% cho nhân viên đạt chỉ tiêu."', 'Chief accountant: "The company payroll is ready. There is a proposal for a 5% bonus for staff who hit their targets."'), [
+      { t: V('Duyệt đúng đề xuất, kèm lời cảm ơn gửi toàn công ty.', 'Approve it as proposed, with a thank-you note to the whole company.'), s: V('Nhân viên vui, chi phí tăng nhẹ', 'Staff are happy, costs rise slightly') },
+      { t: V('Duyệt lương, không thưởng thêm.', 'Approve the payroll, no extra bonus.'), s: V('Đúng quy chế', 'By the book') },
+      { t: V('Yêu cầu hoãn thưởng để bù chi phí quý.', 'Postpone the bonus to cover quarterly costs.'), s: V('Tiết kiệm, nhân viên thất vọng', 'Saves money, disappoints staff'), c: 'danger' }], 'boss');
+    const fx = [{ team: 8, mood: 4, boss: 2 }, { boss: 1 }, { team: -8, boss: -1, mood: -2 }][i]; applyFx(fx);
+    await info(V('Đã ký duyệt', 'Signed off'), [[V('Thông báo thưởng nóng được gửi đi, văn phòng vang tiếng reo nho nhỏ.', 'The bonus notice goes out and a small cheer rises across the office.'), V('Bảng lương được duyệt, mọi thứ diễn ra đúng quy trình.', 'Payroll is approved and everything follows procedure.'), V('Tin hoãn thưởng lan nhanh hơn cả bảng lương.', 'The news of the postponed bonus travels faster than the payroll.')][i]], fx);
+  }
+  return _salary0(resigned);
+};
+
+Object.assign(DEPTS.sep, {
+  label: V('Ban lãnh đạo', 'Executive Board'),
+  blurb: V('Họp Ban, ký duyệt, tiếp đối tác, đánh golf', 'Board meetings, sign-offs, partners, golf'),
+  intro: V('Bạn là Tổng giám đốc. Chín giám đốc khối, chín ý kiến khác nhau, và ai cũng cần bạn quyết "ngay bây giờ".', 'You are the CEO. Nine executives, nine opinions, and everyone needs a decision "right now".'),
+  reqTitle: V('xin chỉ đạo', 'needs your decision'),
+  lines: [V('Sếp cho em xin chữ ký vào bản kế hoạch quý sau nhé.', 'Boss, I need your signature on next quarter\'s plan.'), V('Sếp xem giúp em phương án tuyển thêm hai nhân sự này với.', 'Boss, could you review this plan to hire two more people?'), V('Sếp ơi, đối tác gọi lại, họ muốn gặp sếp trong tuần này.', 'Boss, the partner called back and wants to meet you this week.'), V('Em trình sếp ngân sách điều chỉnh, sếp cho ý kiến giúp em.', 'I am submitting the revised budget. Please share your thoughts.')],
+  chat: [V('Họp, họp nữa, rồi lại họp', 'Meetings, more meetings, then another meeting'), V('Chủ tịch đổi ý lần thứ ba rồi', 'The Chairman has changed his mind a third time'), V('Ngân sách quý sau còn thiếu một con số', 'Next quarter\'s budget is missing one number'), V('Chiều nay golf với đối tác nhé', 'Golf with the partner this afternoon'), V('Báo cáo này sếp tổng có đọc không đây?', 'Will the CEO even read this report?'), V('Cà phê của Chủ tịch phải đúng nhiệt độ', 'The Chairman\'s coffee must be exactly the right temperature')],
+  quiz: [
+    [V('CFO', 'CFO'), V('Sếp ơi, quý này doanh thu thiếu 3 tỷ so với kế hoạch. Anh muốn cắt thưởng toàn công ty hay cắt chi phí quảng cáo?', 'Boss, revenue is 3 billion short of plan this quarter. Cut bonuses company-wide, or cut advertising?'), [[V('Xem chi tiết từng khoản chi, cắt phần kém hiệu quả trước và giữ thưởng cho người đạt chỉ tiêu.', 'Review every expense, cut the least effective spending first and keep bonuses for those who hit targets.'), V('CFO ghi chép liên tục: "Phương án này công bằng và có số liệu."', 'The CFO takes notes: "This approach is fair and backed by data."')], [V('Cắt thưởng 10% đều cho tất cả, ai cũng chịu một ít.', 'Cut every bonus by 10% so everyone shares the pain.'), V('Không ai vui, nhưng cũng không ai quá giận.', 'Nobody is happy, but nobody is furious either.')], [V('Cắt hết thưởng, riêng Ban lãnh đạo vẫn giữ.', 'Cut all bonuses except the executives\'.'), V('Tin này lan khắp công ty trước cả khi bạn kịp ra khỏi phòng.', 'The news spreads across the company before you leave the room.')]]],
+    [V('CHRO', 'CHRO'), V('Một trưởng phòng giỏi vừa xin nghỉ vì lương thấp hơn thị trường 20%.', 'A strong department head just resigned because their pay is 20% below market.'), [[V('Gặp riêng, lắng nghe, rồi đề xuất lộ trình điều chỉnh lương trong khung cho phép.', 'Meet privately, listen, and propose a pay adjustment path within the allowed range.'), V('Anh ấy ở lại, và còn giới thiệu thêm hai ứng viên giỏi.', 'They stay, and even refer two strong candidates.')], [V('Hứa "sẽ xem xét sau" để giữ chân tạm thời.', 'Promise to "look into it later" to keep them for now.'), V('Ba tháng sau anh ấy vẫn nghỉ, kèm một lá thư dài.', 'Three months later they leave anyway, with a long letter.')], [V('Để anh ấy đi, ai cũng thay thế được.', 'Let them go; anyone can be replaced.'), V('Cả phòng của anh ấy bắt đầu cập nhật hồ sơ xin việc.', 'Their whole team starts updating their résumés.')]]],
+    [V('Đối tác', 'Partner'), V('Chúng tôi sẵn sàng ký hợp đồng 5 năm, nhưng muốn giảm giá 25% ngay từ năm đầu.', 'We are ready to sign a five-year contract, but we want a 25% discount from year one.'), [[V('Đề xuất giảm dần theo sản lượng, đổi lại cam kết khối lượng tối thiểu.', 'Offer a volume-based discount in exchange for a minimum purchase commitment.'), V('Hai bên bắt tay, cả hai đều thấy mình thắng.', 'You shake hands; both sides feel they won.')], [V('Đồng ý giảm 10% để chốt nhanh.', 'Agree to 10% off to close quickly.'), V('Họ vẫn ký, và đòi thêm điều khoản giao hàng.', 'They sign anyway and ask for extra delivery terms.')], [V('Đồng ý hết, tính toán sau.', 'Agree to everything and work out the numbers later.'), V('CFO nhìn bản hợp đồng và lặng lẽ ngồi xuống.', 'The CFO looks at the contract and quietly sits down.')]]],
+    [V('COO', 'COO'), V('Nhà máy báo hỏng một dây chuyền, đơn hàng lớn sẽ trễ ba ngày.', 'The factory reports a broken production line; a large order will be three days late.'), [[V('Báo khách chủ động, giao một phần trước và điều phối dây chuyền khác tăng ca.', 'Tell the customer proactively, ship part of the order first and have other lines work overtime.'), V('Khách hơi phiền lòng nhưng đánh giá cao sự minh bạch.', 'The customer is slightly annoyed but values the transparency.')], [V('Xin lỗi khách và hẹn lại ngày giao.', 'Apologize to the customer and set a new delivery date.'), V('Khách chấp nhận, nhưng ghi nhận một lần trễ hẹn.', 'They accept it but note one missed deadline.')], [V('Im lặng đến sát hạn, biết đâu kịp.', 'Stay quiet until the deadline and hope it works out.'), V('Không kịp. Khách gọi tới đúng lúc bạn đang họp.', 'It does not. The customer calls just as you are in a meeting.')]]],
+    [V('CMO', 'CMO'), V('Có một influencer đề nghị quảng cáo miễn phí, đổi lại muốn toàn quyền nội dung.', 'An influencer offers free promotion in exchange for full control over the content.'), [[V('Nhận lời nhưng thống nhất khung nội dung và duyệt bản trước khi đăng.', 'Accept, but agree on a content framework and review before posting.'), V('Chiến dịch lên sóng đúng thông điệp, lượng tương tác tăng vọt.', 'The campaign airs on message and engagement soars.')], [V('Từ chối cho an toàn.', 'Decline to be safe.'), V('An toàn, nhưng đối thủ nhận lời ngay chiều hôm đó.', 'Safe, but a rival accepts that very afternoon.')], [V('Đồng ý toàn quyền, miễn là nổi tiếng.', 'Give full control as long as it goes viral.'), V('Bài đăng đầu tiên khiến phòng Pháp chế mất ngủ.', 'The first post keeps the Legal department awake all night.')]]],
+    [V('CTO', 'CTO'), V('Hệ thống vừa bị tấn công, dữ liệu khách hàng có thể bị lộ.', 'The system has just been attacked and customer data may have leaked.'), [[V('Cô lập hệ thống, lập đội xử lý, báo khách và cơ quan chức năng theo quy định.', 'Isolate the system, form a response team and notify customers and authorities as required.'), V('Mất mấy ngày vất vả, nhưng khách hàng vẫn tin tưởng công ty.', 'A few exhausting days, but customers still trust the company.')], [V('Xử lý nội bộ trước, báo sau khi có kết quả.', 'Handle it internally first and report once there are results.'), V('Kịp khắc phục, nhưng vi phạm thời hạn thông báo.', 'You fix it in time but miss the notification deadline.')], [V('Giữ kín, hy vọng không ai biết.', 'Keep it quiet and hope nobody finds out.'), V('Ba ngày sau báo chí gọi điện hỏi trước cả bạn.', 'Three days later reporters call asking about it before you even know.')]]],
+    [V('Chủ tịch', 'Chairman'), V('Công ty bên cạnh đề nghị sáp nhập. Anh thấy thế nào?', 'The company next door proposes a merger. What do you think?'), [[V('Xin thời gian thẩm định, thuê tư vấn độc lập rồi trình Hội đồng quản trị.', 'Ask for time to evaluate, hire independent advisers and take it to the Board.'), V('Chủ tịch gật đầu: "Cẩn trọng, tôi thích điều đó."', 'The Chairman nods: "Careful. I like that."')], [V('Đồng ý về nguyên tắc để đối tác khỏi đổi ý.', 'Agree in principle so the other side does not change its mind.'), V('Chủ tịch hỏi: "Anh đã xem sổ sách của họ chưa?"', 'The Chairman asks: "Have you seen their books yet?"')], [V('Quyết ngay vì thấy cơ hội đầu tư hấp dẫn.', 'Decide on the spot because the opportunity looks attractive.'), V('Chủ tịch im lặng, rồi gọi luật sư vào.', 'The Chairman is silent, then calls in the lawyers.')]]],
+    [V('Phó TGĐ', 'Deputy CEO'), V('Hai giám đốc chi nhánh đang cãi nhau chuyện ai được tính doanh số khách hàng chung.', 'Two branch managers are arguing over who gets credit for a shared customer\'s sales.'), [[V('Họp ba bên, đặt tiêu chí chia doanh số rõ ràng áp dụng cho mọi trường hợp tương tự.', 'Hold a three-way meeting and set clear attribution rules for all similar cases.'), V('Cả hai thấy mình được tôn trọng, và quy tắc mới được dán lên bảng.', 'Both feel respected, and the new rule is pinned to the board.')], [V('Phân xử theo cảm tính cho xong chuyện.', 'Rule by gut feeling to end it.'), V('Một người thắng, một người ôm hận.', 'One wins, the other holds a grudge.')], [V('Giả vờ không biết.', 'Pretend you do not know.'), V('Họ quay sang nhờ cả Chủ tịch phân xử.', 'They turn to the Chairman to settle it.')]]]
+  ]
+});
+
+/* ============ 8c. TREND ĐI LÀM (từ các meme/caption đang lan trên mạng, viết lại thành tình huống trong game) ============ */
+const W = (vi, en) => (EN_DATA[vi] === undefined ? V(vi, en) : vi);
+const TREND_CHAT = [
+  V('Mệt đến mức không đi làm nổi, nhưng nghèo đến mức không dám nghỉ', 'Too tired to work, too broke to take a day off'),
+  V('Đọc tin nhắn vô lý mà vẫn rep bằng giọng nhẹ nhàng, đúng là miếng cơm manh áo', 'Reading an absurd message and replying sweetly. Such is the price of rice'),
+  V('Bộ không thấy quầng thâm của tôi hay sao mà giao thêm task?', 'Can\'t you see my dark circles? And you still add a task?'),
+  V('Từ từ sếp ơi, em bị khờ', 'Easy, boss, I\'m buffering'),
+  V('Sếp nghĩ khả năng của tôi là vô hạn, còn thời gian của tôi thì không', 'The boss thinks my ability is infinite. My time is not'),
+  V('Cái quần này ngày nào tôi cũng mặc đi làm', 'These are the trousers I wear to work every single day'),
+  V('Muốn đi nhanh thì đi một mình, muốn vừa đi vừa khóc thì đi làm', 'Want to go fast? Go alone. Want to cry while going? Go to work'),
+  V('Đi làm quanh năm cười hô hố, sơ hở là xin nghỉ đi chữa lành', 'Laughing all year at work, the moment there is a gap, off to "heal"'),
+  V('Cuộc tình dù đúng dù sai, thứ Hai vẫn phải đi làm', 'Right or wrong, the love story ends where Monday begins'),
+  V('Yêu công ty đúng hai ngày: ngày nghỉ và ngày nhận lương', 'I love my company on exactly two days: the day off and payday'),
+  V('Lương tháng 100 triệu: 5 triệu lương cứng, 95 triệu lương tâm', 'A 100-million salary: 5 million base, 95 million "conscience pay"'),
+  V('Cố tình trồng hoa, hoa không nở. Vô tình dậy muộn, trễ chấm công', 'Plant flowers on purpose, nothing blooms. Wake up late by accident, miss the check-in'),
+  V('Mười hai giờ đêm: "Sao clip flop vậy em?"', 'Midnight: "Why did the video flop?"'),
+  V('Chị xin phép kill idea này nha', 'Allow me to kill this idea, okay?'),
+  V('Tháng này tiền về hơi chậm, mấy đứa thông cảm nhé', 'Pay is running a bit late this month, please understand')
+];
+Object.keys(DEPTS).forEach(id => { DEPTS[id].chat = (DEPTS[id].chat || []).concat(shuffle(TREND_CHAT.slice()).slice(0, 8)); });
+const TREND_TOASTS = [
+  V('Thứ Hai rồi, cuộc tình dù đúng hay sai thì vẫn phải đi làm.', 'It is Monday. Right or wrong, you still have to go to work.'),
+  V('Có người đang thì thầm: "Mệt đến mức không đi làm nổi, nhưng nghèo đến mức không dám nghỉ."', 'Someone whispers: "Too tired to work, too broke to take a day off."'),
+  V('Tin nhắn nhóm lúc này: "Mọi người ơi, cho em xin thêm một task nữa được không?" (không ai muốn)', 'Group chat right now: "Can I take one more task?" (nobody wants it)'),
+  V('Ai đó thở dài: "Yêu công ty đúng hai ngày: ngày nghỉ và ngày nhận lương."', 'Someone sighs: "I love my company on two days: the day off and payday."'),
+  V('Một đồng nghiệp đang nhìn màn hình với ánh mắt đã "tải" quá lâu: "Từ từ, em bị khờ."', 'A colleague stares at the screen with a long-buffering look: "Hold on, I\'m buffering."'),
+  V('Điện thoại rung: "Chị xin phép kill idea này nha!" Cả phòng đồng loạt cúi đầu.', 'Phones buzz: "Allow me to kill this idea!" The whole room bows its head at once.')
+];
+const TREND_QUIZ = [
+  [W('Sếp', 'Boss'), V('17 giờ 29 phút: "Em ơi, nhận giúp anh task này nhé, chỉ năm phút thôi."', '5:29 PM: "Could you take this task? It only takes five minutes."'), [[V('Hỏi rõ phạm vi và hạn chót, đề nghị xếp thứ tự ưu tiên với việc đang làm.', 'Ask about scope and deadline, and propose how to prioritize it against current work.'), V('Sếp gật đầu: "Ừ, mai làm cũng được."', 'The boss nods: "Fine, tomorrow works."')], [V('Nhận luôn rồi ở lại làm cho xong.', 'Accept and stay late to finish it.'), V('Năm phút hóa thành hai tiếng, bạn về lúc 19 giờ.', 'Five minutes turns into two hours. You leave at 7 PM.')], [V('Im lặng nhìn sếp với ánh mắt trống rỗng.', 'Stare at the boss in blank silence.'), V('Sếp hỏi: "Em ổn chứ?" rồi giao thêm một task nữa.', 'The boss asks "Are you okay?" and adds one more task.')]]],
+  [W('Khách hàng', 'Customer'), V('(22 giờ, tin nhắn tới): "Gấp! Sửa hết trong tối nay, sáng mai tôi cần."', '(10 PM, a message arrives): "Urgent! Fix everything tonight, I need it tomorrow morning."'), [[V('Trả lời lịch sự, xác nhận phạm vi và hẹn gửi bản đầu trước 10 giờ sáng.', 'Reply politely, confirm the scope and promise a first version by 10 AM.'), V('Khách đồng ý, và bạn ngủ được tám tiếng.', 'The customer agrees, and you get eight hours of sleep.')], [V('Làm xuyên đêm rồi gửi lúc rạng sáng.', 'Work all night and send it at dawn.'), V('Khách hài lòng, còn bạn thì nhìn gương thấy một chú gấu trúc.', 'The customer is pleased. You look in the mirror and see a panda.')], [V('Đọc xong, tắt thông báo đến sáng.', 'Read it, then mute notifications until morning.'), V('Sáng ra có mười bốn cuộc gọi nhỡ.', 'By morning there are fourteen missed calls.')]]],
+  [W('Đồng nghiệp', 'Colleague'), V('(8 giờ 45 sáng thứ Hai): "Nghèo mà mệt thế này, nghỉ cũng không dám. Cậu thấy sao?"', '(Monday, 8:45 AM): "So tired and too broke to rest. What do you think?"'), [[V('Rủ đi ăn trưa, cùng lên kế hoạch xin nghỉ phép đúng quy trình.', 'Invite them to lunch and plan a leave request through the proper channel.'), V('Cả hai ăn trưa xong thấy đời đỡ nặng hơn.', 'After lunch, life feels a little lighter for both of you.')], [V('Cười: "Ai chẳng vậy."', 'Laugh: "Same for everyone."'), V('Bạn ấy cười gượng rồi cắm đầu vào màn hình.', 'They force a smile and dive back into the screen.')], [V('Rủ nhau xin nghỉ ốm giả.', 'Suggest faking sick leave together.'), V('Hôm sau sếp gặp cả hai ở trung tâm thương mại.', 'The next day the boss runs into both of you at the mall.')]]],
+  [W('Sếp', 'Boss'), V('"Anh đánh giá khả năng của em là vô hạn, nên anh giao thêm dự án này nhé."', '"I believe your ability is unlimited, so here is another project for you."'), [[V('Cảm ơn sếp và đề nghị bổ sung nhân sự hoặc thời gian cho dự án mới.', 'Thank the boss and ask for extra people or time for the new project.'), V('Sếp: "Ừ, anh sẽ xem." Và anh thật sự xem.', 'The boss: "I\'ll look into it." And he actually does.')], [V('Dạ vâng ạ.', 'Yes, of course.'), V('Khả năng thì vô hạn, nhưng thời gian thì không.', 'The ability may be unlimited. The time is not.')], [V('Nói: "Từ từ sếp, em bị khờ."', 'Say: "Easy, boss, I\'m buffering."'), V('Sếp bật cười, nhưng dự án vẫn được giao.', 'The boss laughs, but the project is still assigned.')]]],
+  [W('Trưởng nhóm', 'Team lead'), V('"Chị xin phép kill idea này nha, deadline là ngày mai."', '"Allow me to kill this idea, okay? The deadline is tomorrow."'), [[V('Hỏi lý do và đề xuất một phiên bản rút gọn của ý tưởng.', 'Ask why and propose a slimmed-down version of the idea.'), V('Chị đồng ý giữ lại phần hay nhất.', 'She agrees to keep the best part.')], [V('Dạ vâng, em làm lại từ đầu.', 'Sure, I\'ll start over.'), V('Ý tưởng mới ra lúc nửa đêm, ổn nhưng bạn kiệt sức.', 'The new idea arrives at midnight: fine, but you are exhausted.')], [V('Giận dỗi, nộp lại bản cũ như chưa nghe gì.', 'Sulk and resubmit the old version as if you heard nothing.'), V('Chị phát hiện ngay trong một phút.', 'She notices within a minute.')]]],
+  [W('Kế toán', 'Accountant'), V('"Tháng này lương về hơi chậm, mọi người thông cảm nhé."', '"Pay is running a bit late this month, please understand."'), [[V('Hỏi ngày chuyển cụ thể và chuẩn bị ngân sách tạm cho tuần này.', 'Ask for the exact transfer date and plan a temporary budget for this week.'), V('Có ngày rõ ràng, bạn bớt lo hẳn.', 'With a clear date, you worry a lot less.')], [V('Than trong nhóm chat.', 'Complain in the group chat.'), V('Nhóm than bốn mươi tin nhắn, lương vẫn chậm.', 'The group sends forty complaints; the pay is still late.')], [V('Vay nóng, hứa trả sau.', 'Take a quick loan and promise to pay later.'), V('Lương về, và lãi cũng về.', 'Pay arrives, and so does the interest.')]]],
+  [W('Bạn thân', 'Best friend'), V('"Cuối tuần đi chữa lành nhé? Sơ hở là cậu xin nghỉ rồi mà."', '"Healing trip this weekend? You always ask for leave the moment there is a gap."'), [[V('Chọn cuối tuần, đi nửa ngày và tắt thông báo công việc.', 'Pick the weekend, go for half a day and mute work notifications.'), V('Bạn quay về thứ Hai với một khuôn mặt tươi hơn.', 'You return on Monday with a brighter face.')], [V('Đi nhưng mang theo laptop.', 'Go, but bring the laptop.'), V('Ngồi cạnh biển mà gõ báo cáo, nghe sóng như tiếng email.', 'You type a report by the sea; the waves sound like email.')], [V('Xin nghỉ liền ba ngày bằng lý do đột xuất.', 'Request three days off for an "emergency".'), V('Sếp hỏi: "Lại chữa lành à?" và xem xét rất kỹ.', 'The boss asks: "Healing again?" and reviews it very carefully.')]]]
+];
+Object.keys(DEPTS).forEach(id => { if (id !== 'sep') DEPTS[id].quiz = (DEPTS[id].quiz || []).concat(TREND_QUIZ); });
 
 let shareBlob = null;
 function wrapText(g, text, maxW, maxLines) { const words = text.split(' '), lines = []; let cur = ''; for (const w of words) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; } if (cur) lines.push(cur); return lines.slice(0, maxLines); }
@@ -1635,7 +1938,7 @@ function makeShareCard(s) {
   g.fillStyle = '#ffd27a'; g.font = '700 62px "Times New Roman",Times,serif'; const rl = wrapText(g, tr(s.rank), 900, 2); rl.forEach((l, i) => g.fillText(l, W / 2, 650 + i * 72));
   g.fillStyle = '#e8f6ff'; g.font = '500 36px system-ui,sans-serif'; wrapText(g, tr(s.flavor), 880, 3).forEach((l, i) => g.fillText(l, W / 2, 830 + i * 48));
   g.fillStyle = '#9fe8a0'; g.font = '700 70px system-ui,sans-serif'; g.fillText(fmtMoney(s.net), W / 2, 1010); g.fillStyle = 'rgba(232,246,255,.85)'; g.font = '500 30px system-ui,sans-serif'; g.fillText(tr('thực nhận sau một tuần đi làm'), W / 2, 1056);
-  [['😊 Tâm trạng', G.mood], ['😎 Sếp ưa', G.boss], ['🤝 Đồng nghiệp', G.team]].forEach(([n, v], i) => { const x = 130 + i * 300; g.fillStyle = 'rgba(255,255,255,.2)'; g.fillRect(x, 1130, 240, 16); g.fillStyle = '#ffd27a'; g.fillRect(x, 1130, 240 * clamp(v, 0, 100) / 100, 16); g.fillStyle = '#fff'; g.font = '500 28px system-ui,sans-serif'; g.fillText(tr(n), x + 120, 1120); });
+  [['😊 Tâm trạng', G.mood], isSep() ? [V('🎩 Uy tín', '🎩 Reputation'), G.boss] : ['😎 Sếp ưa', G.boss], isSep() ? [V('🤝 Nhân viên', '🤝 Staff'), G.team] : ['🤝 Đồng nghiệp', G.team]].forEach(([n, v], i) => { const x = 130 + i * 300; g.fillStyle = 'rgba(255,255,255,.2)'; g.fillRect(x, 1130, 240, 16); g.fillStyle = '#ffd27a'; g.fillRect(x, 1130, 240 * clamp(v, 0, 100) / 100, 16); g.fillStyle = '#fff'; g.font = '500 28px system-ui,sans-serif'; g.fillText(tr(n), x + 120, 1120); });
   g.fillStyle = 'rgba(255,255,255,.85)'; g.font = '500 28px system-ui,sans-serif'; g.fillText(tr('Đi Làm Online · game giải trí, mọi tình huống đều hư cấu'), W / 2, H - 60);
   return cv;
 }
@@ -1661,10 +1964,10 @@ function cineOff() { cine.on = false; }
 const AVAIL = {
   checkin: () => isOpen('checkin'), files: () => isOpen('files'), desk: () => true, meeting: () => isOpen('meeting'),
   lunch: () => G.T >= 660 && G.T <= 840 && !G.flags.ate && taskById('lunch').st !== 'done', tea: () => true, ship: () => !!(G.order && G.order.ready), gossip: () => true,
-  argue: () => isOpen('argue'), boss: () => true, nap: () => true, salary: () => G.day === G.days && G.T >= 1020 && !G.paid
+  argue: () => isSep() ? (G.T >= 840 && G.T <= 1020 && !G.flags.golfed) : isOpen('argue'), boss: () => true, nap: () => true, salary: () => G.day === G.days && G.T >= 1020 && !G.paid
 };
 const URGENT = { checkin: 'checkin', files: 'files', meeting: 'meeting', lunch: 'lunch', ship: 'ship', argue: 'argue', boss: 'scold', salary: 'salary', desk: 'req' };
-const stLabel = s => s.id === 'boss' ? (G.flags.summoned ? 'Nghe sếp la' : 'Phòng sếp') : s.name;
+const stLabel = s => s.id === 'boss' ? (G.flags.summoned ? SX('Nghe sếp la', 'Giải trình với Chủ tịch', 'Explain to the Chairman') : s.name) : s.name;
 function updateNear() {
   let best = null, bd = 1e9;
   if (ST.mode === 'play') for (const s of STATIONS) { if (!AVAIL[s.id]()) continue; const d = Math.hypot(player.x - s.x, player.z - s.z); if (d < TRIG_R && d < bd) { bd = d; best = s; } }
@@ -1742,10 +2045,10 @@ let chosenDays = 3;
 document.querySelectorAll('#modeRow [data-days]').forEach(b => b.addEventListener('click', () => { chosenDays = +b.dataset.days; document.querySelectorAll('#modeRow [data-days]').forEach(x => x.classList.toggle('on', x === b)); }));
 
 function enterOffice() {
-  const nm = $('nameIn').value.replace(/\s+/g, ' ').trim().slice(0, 20) || 'Nhân viên mới'; ST.name = nm; save.name = nm; persist(); Aud.start(); Aud.click(); setPlayerName(nm);
+  const nm = $('nameIn').value.replace(/\s+/g, ' ').trim().slice(0, 20) || (isSep() ? 'Tổng giám đốc' : 'Nhân viên mới'); ST.name = nm; save.name = nm; persist(); Aud.start(); Aud.click(); setPlayerName(nm);
   newGame(chosenDays); $('title').classList.add('hide'); $('hud').style.display = 'block'; if (isTouch) applyTouchUI(); $('bMute').textContent = Aud.muted ? '🔇' : '🔊';
   cam.yaw = 0; cam.pitch = 0.6; cam.tdist = 9; cam.dist = 9; setMode('play'); ST.crowd = 0.7;
-  if (!save.tutorialDone) { tutI = 0; tutShow(); } toast(`Chào ${nm}! Server ${DEPT.name}. Thứ 2, 8 giờ sáng, nhớ chấm công trước 8:30!`, 4600);
+  if (!save.tutorialDone) { tutI = 0; tutShow(); } toast(isSep() ? VP(`Chào ${nm}! Server ${DEPT.name}. Thứ 2, 8 giờ sáng, lịch hôm nay kín mít, nhớ có mặt trước 8:30!`, 'Hi {}! Server {}. Monday, 8 AM, a packed schedule today. Be at the office by 8:30!', 'Chào {}! Server {}. Thứ 2, 8 giờ sáng, lịch hôm nay kín mít, nhớ có mặt trước 8:30!') : `Chào ${nm}! Server ${DEPT.name}. Thứ 2, 8 giờ sáng, nhớ chấm công trước 8:30!`, 4600);
 }
 
 let last = performance.now(), emaDt = 1 / 60, lowT = 0;
