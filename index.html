@@ -180,6 +180,7 @@ input{user-select:text;-webkit-user-select:text}
     <button class="ib" id="bLang" aria-label="Language">🌐</button>
     <button class="ib" id="bMute" aria-label="Âm thanh">🔊</button>
     <button class="ib" id="bSpeed" aria-label="Tua nhanh giờ">⏩</button>
+    <button class="ib" id="bRank" aria-label="Bảng vàng">🏆</button>
     <button class="ib" id="bTasks" aria-label="Danh sách việc">📋</button>
   </div>
   <div class="hbox" id="tasks"><h4>VIỆC HÔM NAY</h4><ul id="taskList"></ul></div>
@@ -296,7 +297,7 @@ function applyStaticLang() {
   $('bLang').title = LANG === 'vi' ? 'Ngôn ngữ / Language' : 'Language / Ngôn ngữ';
 }
 function setLang(l) {
-  LANG = l; trMemo.clear(); save.lang = l; persist(); applyStaticLang(); relabelWorld(); renderAll(); buildSrvGrid(); updateSrvBox(); updateTet();
+  LANG = l; trMemo.clear(); save.lang = l; persist(); applyStaticLang(); relabelWorld(); renderAll(); buildSrvGrid(); updateSrvBox(); updateTet(); paintReqMark(); rankRefresh();
   if ($('tut').style.display === 'block') tutShow(); nearSt = null; updateNear();
 }
 function bindLang() {
@@ -734,7 +735,7 @@ function buildStations() {
     s.paint = () => { s.label.material.map.dispose(); s.label.material.map = paint(); s.label.material.needsUpdate = true; };
   });
 }
-function buildWorld() { applyStationSet(); buildShell(); buildFurniture(); deptProps(); tetBoards(); flushStatics(); buildStations(); }
+function buildWorld() { applyStationSet(); buildShell(); buildFurniture(); deptProps(); tetBoards(); rankBoardBuild(); flushStatics(); buildStations(); reqMarkBuild(); }
 
 
 /* ============ 4. NHÂN VẬT: NGƯỜI CHƠI ============ */
@@ -907,7 +908,7 @@ const fmtT = T => String(Math.floor(T / 60) % 24).padStart(2, '0') + ':' + Strin
 const taskById = id => G.tasks.find(t => t.id === id);
 const isOpen = id => { const t = taskById(id); return !!t && t.st === 'open' && t.start <= G.T; };
 function newGame(days, carry) {
-  Object.assign(G, { days, day: 1, T: 480, kpi: 0, goal: 50, kpiTotal: 0, energy: 78, mood: 78, boss: 55, team: 55, money: (isSep() ? 20000000 : 500000) + (carry ? carry.net : 0), fines: [], otMin: 0, otPay: 0, tasks: [], queue: [], flags: {}, order: null, paid: false, over: false, caught: 0, wins: 0, prob: days === 1, probPay: carry || null });
+  Object.assign(G, { days, day: 1, T: 480, kpi: 0, goal: 50, kpiTotal: 0, energy: 78, mood: 78, boss: 55, team: 55, money: (isSep() ? 20000000 : 500000) + (carry ? carry.net : 0), fines: [], otMin: 0, otPay: 0, tasks: [], queue: [], flags: {}, order: null, paid: false, over: false, caught: 0, wins: 0, doneTotal: 0, helped: 0, prob: days === 1, probPay: carry || null });
   startDay(true);
 }
 function newDayTasks() {
@@ -935,7 +936,7 @@ function startDay(first) {
   player.x = -4.5; player.z = 7.9; player.h = Math.PI; player.pose = 'idle'; cam.yaw = 0; cam.tx = -4.5; cam.tz = 7.9;
   NPC.forEach(n => { if (n.role === 'staff') { n.locked = false; if (n.desk && n.st !== 'seat') { n.x = n.desk.x; n.z = n.desk.z + 0.95; n.st = 'seat'; n.face = Math.PI; n.tmr = rnd(25, 90); } } });
   const b = NPC.boss; b.spd = 1.1; b.active = true; b.x = -14; b.z = -12.2; b.st = 'desk'; b.face = 0; ST.patrol = false; NPC.ship.active = false; NPC.ship.st = 'out';
-  updateWallClock(G.T); renderAll(); applyTime(G.T);
+  updateWallClock(G.T); renderAll(); applyTime(G.T); if (typeof rankRefresh === 'function') rankRefresh();
 }
 const clampStat = v => clamp(v, 0, 100);
 const FXN = { mood: ['😊', ''], energy: ['⚡', ''], kpi: ['📈', ''], boss: ['😎', ''], team: ['🤝', ''], money: ['💰', ''] };
@@ -959,7 +960,7 @@ function renderTasks() {
 }
 function renderAll() { const nm = G.prob ? V('Thử việc', 'Trial day') : (G.days === 3 ? NAMES3 : NAMES5)[G.day - 1]; $('clkDay').textContent = nm; $('clkInfo').textContent = `${G.day}/${G.days}`; renderHUD(); renderClock(); renderTasks(); }
 function addTask(t) { if (!taskById(t.id)) { G.tasks.push(Object.assign({ st: 'open', start: G.T }, t)); renderTasks(); } else { const o = taskById(t.id); Object.assign(o, t, { st: 'open' }); renderTasks(); } }
-function doneTask(id) { const t = taskById(id); if (t && t.st === 'open') { t.st = 'done'; renderTasks(); } }
+function doneTask(id) { const t = taskById(id); if (t && t.st === 'open') { t.st = 'done'; G.doneTotal = (G.doneTotal || 0) + 1; renderTasks(); } }
 const PENALTY = {
   checkin() { fine('Nghỉ không phép sáng nay', 200000); applyFx({ boss: -10, mood: -5 }); },
   meeting() { fine('Vắng mặt buổi họp giao ban', 100000); applyFx({ boss: -10 }); },
@@ -981,7 +982,7 @@ function advance(mins) {
 }
 function onMinute(m) {
   G.energy = clampStat(G.energy - (m > 750 && !G.flags.ate ? 0.09 : 0.04)); G.mood = clampStat(G.mood - 0.012);
-  if (m % 5 === 0) renderHUD();
+  if (m % 5 === 0) renderHUD(); if (m % 30 === 0) rankRefresh(); if (m === 735) rankAnnounce('pos'); if (m === 1060) rankAnnounce('kpi');
   G.flags.reqAt.forEach(t => { if (m === Math.floor(t)) deptRequest(); });
   for (const t of G.tasks) if (t.st === 'open' && t.due === m) failTask(t.id);
   for (const t of G.tasks) if (t.start === m && t.st === 'open') { renderTasks(); if (t.id === 'meeting') toast(SX('Sắp đến giờ họp giao ban, vào phòng họp nhé!', 'Sắp đến giờ họp Ban lãnh đạo, mọi người đang chờ!', 'The board meeting is about to start, everyone is waiting!')); else if (t.id === 'files') toast(SX('Lễ tân gọi: có hồ sơ cho bạn!', 'Thư ký báo: có chồng hồ sơ chờ sếp ký!', 'Your secretary: a stack of documents is waiting for your signature!')); else if (t.id === 'lunch') toast(SX('Sắp đến giờ nghỉ trưa, nghĩ xem ăn gì nào.', 'Sắp đến giờ hẹn ăn trưa với đối tác, chọn nhà hàng nào?', 'Lunch with the partner is coming up. Which restaurant?')); }
@@ -1538,7 +1539,8 @@ function deptRequest() {
   const c = NPC.filter(n => n.role === 'staff' && n.st === 'seat' && !n.locked && n !== NPC.hung); if (!c.length) return; const n = pick(c); n.locked = true;
   const line = pick(DEPT.lines); G.req = { who: n.call || 'Đồng nghiệp', line, npc: n };
   goPath(n, [[n.desk.x, AISLE[n.desk.r]], [5.3, AISLE[n.desk.r]], [5.3, AISLE[2]], [OFF.myDesk.x + 0.9, AISLE[2]]], () => { n.st = 'chat'; n.tmr = 9999; n.face = Math.PI; npcSay(n, line, 7); });
-  addTask({ id: 'req', text: `${G.req.who} nhờ: ${DEPT.reqTitle}`, due: Math.floor(G.T) + 75 }); toast(`${G.req.who} (${DEPT.label || DEPT.name}): "${line}"`, 4600); Aud.ding();
+  addTask({ id: 'req', text: VP(`${G.req.who} nhờ: ${DEPT.reqTitle} (về bàn của bạn)`, '{} asks: {} (go to your desk)', '{} nhờ: {} (về bàn của bạn)'), due: Math.floor(G.T) + 75 });
+  toast(VP(`${G.req.who} (${DEPT.label || DEPT.name}): "${line}" 👉 Về bàn làm việc của bạn để xử lý nhé!`, '{} ({}): "{}" 👉 Head back to your desk to handle it!', '{} ({}): "{}" 👉 Về bàn làm việc của bạn để xử lý nhé!'), 6200); Aud.ding();
 }
 function reqClose() { const n = G.req && G.req.npc; if (n) { n.locked = false; n.tmr = 0; if (n.st === 'chat') sendHome(n); } G.req = null; }
 
@@ -1548,7 +1550,7 @@ async function actWork() {
   const intro = req ? `${tr(req.who)}: "${tr(req.line)}"` : DEPT.intro; let score;
   const useQuiz = DEPT.work === 'quiz' || (DEPT.quiz && DEPT.quiz.length && Math.random() < 0.5);
   if (useQuiz) score = await workQuiz(DEPT.work === 'quiz' || req ? intro : INTRO_Q); else if (DEPT.work === 'spot') score = await workSpot(intro); else score = await workDesign(intro);
-  const fx = { kpi: Math.round(score * 0.45) + (req ? 8 : 0), energy: -8, mood: score >= 70 ? 2 : score >= 40 ? -1 : -4 }; if (req) { fx.team = 4; doneTask('req'); reqClose(); } if (score >= 85) fx.boss = 2;
+  const fx = { kpi: Math.round(score * 0.45) + (req ? 8 : 0), energy: -8, mood: score >= 70 ? 2 : score >= 40 ? -1 : -4 }; if (req) { fx.team = 4; doneTask('req'); G.helped = (G.helped || 0) + 1; reqClose(); } if (score >= 85) fx.boss = 2;
   applyFx(fx); await info(isSep() ? V('Xong việc điều hành', 'Management work done') : `Xong việc phòng ${DEPT.name}`, [score >= 85 ? SX('Làm rất gọn, đồng nghiệp gật đầu hài lòng.', 'Quyết định dứt khoát, Ban lãnh đạo gật đầu hài lòng.', 'Decisive calls. The board nods in approval.') : score >= 50 ? SX('Tạm ổn, vẫn còn vài chỗ cần chỉnh.', 'Tạm ổn, vẫn còn vài điểm cần cân nhắc thêm.', 'Decent, a few points still need thought.') : SX('Hơi lúng túng, làm lại chắc sẽ tốt hơn.', 'Hơi lúng túng, lần sau nên hỏi ý kiến cố vấn trước.', 'A bit shaky. Next time, consult an advisor first.'), req ? `${req.who} cảm ơn bạn và quay về bàn.` : ''].filter(Boolean), fx); await endActivity(30);
 }
 const VOUCH = [
@@ -1718,7 +1720,7 @@ ACT.salary = async (resigned) => {
     ui('Kết quả tuần làm việc', b => {
       const r = h('div', 'big', '🏆', b); h('div', 'say', `${s.rank}`, b).style.fontSize = '19px'; h('div', 'say', s.flavor, b);
       h('div', 'say', isSep() ? VP(`Điểm điều hành: ${s.score} · Tâm trạng ${Math.round(G.mood)} · Uy tín ${Math.round(G.boss)} · Tinh thần nhân viên ${Math.round(G.team)}`, 'Leadership score: {} · Mood {} · Reputation {} · Staff morale {}', 'Điểm điều hành: {} · Tâm trạng {} · Uy tín {} · Tinh thần nhân viên {}') : `Điểm công sở: ${s.score} · Tâm trạng ${Math.round(G.mood)} · Sếp ưa ${Math.round(G.boss)} · Tình đồng nghiệp ${Math.round(G.team)}`, b);
-      h('div', 'say', `Kỷ lục thực nhận: ${fmtMoney(save.best)} (${save.bestRank})`, b);
+      h('div', 'say', `Kỷ lục thực nhận: ${fmtMoney(save.best)} (${save.bestRank})`, b); rankSummary(b);
       const row = h('div', 'row', null, b); const sh = h('button', 'btn big', '📸 Chia sẻ ảnh', row), re = h('button', 'btn big', '🔁 Chơi lại', row);
       sh.addEventListener('click', () => { Aud.click(); openShare(s); }); re.addEventListener('click', () => location.reload());
     });
@@ -2052,6 +2054,95 @@ function tetBoards() { // bảng đếm ngày đến Tết đặt trong văn ph�
   box(SOL, 0x3a2414, 17.99, 2.4, -1.5, 0.05, 1.5, 2.6); mkBoard(17.95, 2.4, -1.5, -Math.PI / 2, 2.4, 1.35, 0.0);
   TET_BOARDS.forEach(paintTetBoard); updateTet();
 }
+/* ============ 8e. BẢNG VÀNG NHÂN VIÊN: xuất sắc (KPI), tích cực, được lòng đồng nghiệp ============ */
+/* Hiện chạy cục bộ: xếp hạng bạn với đồng nghiệp AI trong phòng. Khi có máy chủ thật, chỉ cần
+   thay rankData() bằng dữ liệu người chơi thật cùng phòng (tên + điểm) là bảng tự hiện đúng. */
+const RANK_CATS = [
+  { id: 'kpi', icon: '🏆', title: V('Nhân viên xuất sắc', 'Employee of Excellence'), unit: V('KPI', 'KPI') },
+  { id: 'pos', icon: '💪', title: V('Nhân viên tích cực', 'Most Proactive'), unit: V('điểm', 'pts') },
+  { id: 'team', icon: '🤝', title: V('Được lòng đồng nghiệp', 'Team Favourite'), unit: V('điểm', 'pts') }
+];
+function rankInitOne(n) {
+  const star = Math.random() < 0.08; n.rk = { skill: star ? rnd(1.05, 1.25) : rnd(0.62, 1.05), pos: rnd(0.5, 1.1), team: rnd(38, 92), noise: Array.from({ length: 7 }, () => rnd(0.85, 1.12)), ph: rnd(0, TAU) };
+  if (n === NPC.hung) { n.rk.skill = 0.58; n.rk.pos = 0.7; n.rk.team = 30; } // Hùng hay cãi nhau, KPI khiêm tốn
+}
+function rankData() {
+  const prog = clamp((G.T - 480) / 570, 0, 1), dp = G.day - 1 + prog, me = ST.name || save.name || 'Bạn', rows = { kpi: [], pos: [], team: [] };
+  NPC.forEach(n => {
+    if (n.role !== 'staff') return; if (!n.rk) rankInitOne(n); const r = n.rk; let k = 0; for (let d = 1; d < G.day; d++) k += (45 + 5 * d) * r.skill * r.noise[d]; k += (45 + 5 * G.day) * r.skill * r.noise[G.day] * prog;
+    rows.kpi.push({ name: n.call, v: Math.round(k) }); rows.pos.push({ name: n.call, v: Math.round(dp * 70 * r.pos) }); rows.team.push({ name: n.call, v: Math.round(clamp(r.team + 6 * Math.sin(dp * 2 + r.ph), 5, 99)) });
+  });
+  rows.kpi.push({ name: me, v: Math.round(G.kpiTotal), me: true }); rows.pos.push({ name: me, v: Math.round(Math.max(0, (G.doneTotal || 0) * 8 + (G.helped || 0) * 12 + (G.mood - 50) * 0.3)), me: true }); rows.team.push({ name: me, v: Math.round(G.team), me: true });
+  for (const k in rows) rows[k].sort((a, b) => b.v - a.v || (b.me ? 1 : 0) - (a.me ? 1 : 0));
+  return rows;
+}
+const rankOfMe = list => list.findIndex(r => r.me) + 1;
+const RANK_BOARDS = [];
+function paintRankBoard(m) {
+  const R = rankData(), { w, h } = m.userData, N = R.kpi.length;
+  const tex = canvasTex(1024, Math.round(1024 * h / w), (g, cw, ch) => {
+    const gr = g.createLinearGradient(0, 0, 0, ch); gr.addColorStop(0, '#16284a'); gr.addColorStop(1, '#0c1630'); g.fillStyle = gr; g.fillRect(0, 0, cw, ch);
+    g.strokeStyle = '#ffd36a'; g.lineWidth = 10; g.strokeRect(10, 10, cw - 20, ch - 20); g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = '#ffe7a8'; g.font = '800 54px "Times New Roman",Times,serif'; g.fillText(tr(V('BẢNG VÀNG NHÂN VIÊN', 'EMPLOYEE HONOUR BOARD')), cw / 2, 62, cw - 60);
+    g.fillStyle = 'rgba(232,246,255,.8)'; g.font = '600 26px system-ui,sans-serif'; g.fillText(tr(VP(`Phòng ${DEPT.name} · ${N} người`, '{} department · {} people', 'Phòng {} · {} người')), cw / 2, 108, cw - 60);
+    const colW = (cw - 60) / 3;
+    RANK_CATS.forEach((c, ci) => {
+      const x0 = 30 + ci * colW, cx = x0 + colW / 2; g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x0 + 6, 136, colW - 12, ch - 136 - 90);
+      g.fillStyle = '#ffd36a'; g.font = '800 30px system-ui,sans-serif'; g.fillText(c.icon + ' ' + tr(c.title), cx, 168, colW - 24);
+      R[c.id].slice(0, 5).forEach((r, i) => {
+        const y = 224 + i * 62; if (r.me) { g.fillStyle = 'rgba(255,211,106,.35)'; g.fillRect(x0 + 12, y - 28, colW - 24, 54); }
+        g.textAlign = 'left'; g.fillStyle = r.me ? '#fff3c4' : '#e8f6ff'; g.font = (r.me ? '800 ' : '600 ') + '27px system-ui,sans-serif'; g.fillText(['🥇', '🥈', '🥉', '4.', '5.'][i] + ' ' + tr(r.name) + (r.me ? ' ⭐' : ''), x0 + 20, y, colW - 110);
+        g.textAlign = 'right'; g.fillStyle = r.me ? '#ffd36a' : '#9fe8ff'; g.font = '800 28px system-ui,sans-serif'; g.fillText(String(r.v), x0 + colW - 22, y); g.textAlign = 'center';
+      });
+    });
+    g.fillStyle = '#9fe8a0'; g.font = '700 28px system-ui,sans-serif'; g.fillText(tr(VP(`Hạng của bạn: KPI #${rankOfMe(R.kpi)} · Tích cực #${rankOfMe(R.pos)} · Đồng nghiệp #${rankOfMe(R.team)} (trên ${N})`, 'Your rank: KPI #{} · Proactive #{} · Team #{} (of {})', 'Hạng của bạn: KPI #{} · Tích cực #{} · Đồng nghiệp #{} (trên {})')), cw / 2, ch - 46, cw - 60);
+  });
+  if (m.material.map) m.material.map.dispose(); m.material.map = tex; m.material.needsUpdate = true;
+}
+function rankBoardBuild() { // bảng vàng treo trên tường phía bắc, bên phải phòng họp
+  RANK_BOARDS.length = 0; const x = 12.2, z = -13.0, w = 4.6, hh = 2.9;
+  box(SOL, 0x3a2414, x, 2.5, z - 0.05, w + 0.3, hh + 0.3, 0.08);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshBasicMaterial({ toneMapped: false })); m.userData = { w, h: hh }; m.position.set(x, 2.5, z + 0.0); worldG.add(m); RANK_BOARDS.push(m); paintRankBoard(m);
+}
+function rankRefresh() { RANK_BOARDS.forEach(paintRankBoard); }
+async function openRank() {
+  if (ST.mode !== 'play') return; setMode('activity'); const R = rankData(), N = R.kpi.length;
+  await new Promise(res => ui(V('Bảng vàng nhân viên', 'Employee honour board'), b => {
+    RANK_CATS.forEach(c => {
+      const hd = h('div', 'say', c.icon + ' ' + tr(c.title), b); hd.style.cssText = 'font-weight:700;margin-top:6px;border-left-color:#ffd27a';
+      R[c.id].slice(0, 5).forEach((r, i) => { const row = h('div', '', null, b); row.style.cssText = 'display:flex;justify-content:space-between;padding:3px 10px;font-size:14px;' + (r.me ? 'background:rgba(255,210,122,.25);border-radius:8px;font-weight:700' : ''); h('span', '', ['🥇', '🥈', '🥉', '4.', '5.'][i] + ' ', row).append(document.createTextNode(tr(r.name) + (r.me ? ' ⭐' : ''))); h('span', '', r.v + ' ' + tr(c.unit), row); });
+      const me = rankOfMe(R[c.id]); if (me > 5) { const row = h('div', '', null, b); row.style.cssText = 'display:flex;justify-content:space-between;padding:3px 10px;font-size:14px;background:rgba(255,210,122,.25);border-radius:8px;font-weight:700'; h('span', '', '#' + me + ' ', row).append(document.createTextNode(tr(R[c.id][me - 1].name) + ' ⭐')); h('span', '', R[c.id][me - 1].v + ' ' + tr(c.unit), row); }
+    });
+    h('div', 'say', VP(`Bạn đang đứng hạng KPI #${rankOfMe(R.kpi)}, Tích cực #${rankOfMe(R.pos)}, Đồng nghiệp #${rankOfMe(R.team)} trên ${N} người.`, 'You are ranked KPI #{}, Proactive #{}, Team #{} out of {} people.', 'Bạn đang đứng hạng KPI #{}, Tích cực #{}, Đồng nghiệp #{} trên {} người.'), b);
+    const bt = h('button', 'btn big', V('Đóng', 'Close'), b); bt.style.cssText = 'width:100%;margin-top:8px'; bt.addEventListener('click', () => { Aud.click(); res(); });
+  }));
+  closePanel(); setMode('play');
+}
+function rankAnnounce(id) {
+  if (ST.mode !== 'play') return; const R = rankData(), top = R[id][0];
+  toast(top.me ? (id === 'kpi' ? V('🏆 Bạn đang dẫn đầu bảng vàng KPI! Tuyệt vời!', '🏆 You are leading the KPI honour board! Great work!') : V('💪 Bạn đang là nhân viên tích cực nhất phòng!', '💪 You are the most proactive employee in the room!')) : (id === 'kpi' ? VP(`🏆 Nhân viên xuất sắc đang dẫn đầu: ${top.name} (${top.v} KPI)`, '🏆 Top performer so far: {} ({} KPI)', '🏆 Nhân viên xuất sắc đang dẫn đầu: {} ({} KPI)') : VP(`💪 Nhân viên tích cực nhất lúc này: ${top.name} (${top.v} điểm)`, '💪 Most proactive right now: {} ({} pts)', '💪 Nhân viên tích cực nhất lúc này: {} ({} điểm)')), 5000);
+}
+function rankSummary(b) { // dòng tổng kết hạng + danh hiệu ở màn kết quả
+  const R = rankData(), N = R.kpi.length, rk = [rankOfMe(R.kpi), rankOfMe(R.pos), rankOfMe(R.team)];
+  h('div', 'say', VP(`Thứ hạng cuối: KPI #${rk[0]}/${N} · Tích cực #${rk[1]} · Đồng nghiệp #${rk[2]}`, 'Final rank: KPI #{}/{} · Proactive #{} · Team #{}', 'Thứ hạng cuối: KPI #{}/{} · Tích cực #{} · Đồng nghiệp #{}'), b);
+  const won = RANK_CATS.filter((c, i) => rk[i] === 1); if (won.length) { h('div', 'say', tr(V('🏅 Danh hiệu: ', '🏅 Titles: ')) + won.map(c => tr(c.title)).join(', '), b).style.borderLeftColor = '#ffd27a'; save.titles = (save.titles || 0) + won.length; persist(); }
+}
+
+/* ---- Biển báo trên bàn của bạn khi có đồng nghiệp nhờ việc ---- */
+let REQ_MARK = null;
+function paintReqMark() {
+  if (!REQ_MARK) return;
+  const tex = canvasTex(512, 160, (g, w, h) => {
+    g.fillStyle = 'rgba(255,140,40,.95)'; const r = 40; g.beginPath(); g.moveTo(r, 4); g.arcTo(w - 4, 4, w - 4, h - 4, r); g.arcTo(w - 4, h - 4, 4, h - 4, r); g.arcTo(4, h - 4, 4, 4, r); g.arcTo(4, 4, w - 4, 4, r); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 6; g.stroke();
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.font = '800 46px system-ui,"Segoe UI",sans-serif'; g.fillText(tr(V('📌 ĐỒNG NGHIỆP NHỜ VIỆC!', '📌 A COLLEAGUE NEEDS HELP!')), w / 2, 56, w - 30);
+    g.fillStyle = '#3a1a00'; g.font = '700 34px system-ui,"Segoe UI",sans-serif'; g.fillText(tr(V('Về bàn làm việc của bạn để xử lý', 'Go to your desk to handle it')), w / 2, 112, w - 30);
+  });
+  if (REQ_MARK.material.map) REQ_MARK.material.map.dispose(); REQ_MARK.material.map = tex; REQ_MARK.material.needsUpdate = true;
+}
+function reqMarkBuild() {
+  const sd = STATIONS.find(s => s.id === 'desk');
+  REQ_MARK = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: false })); REQ_MARK.scale.set(3.8, 1.2, 1); REQ_MARK.renderOrder = 6; REQ_MARK.visible = false; REQ_MARK.position.set(sd.x, 3.3, sd.z - 0.4); worldG.add(REQ_MARK); paintReqMark();
+}
 function updateTet() {
   const t = tetInfo(), key = LANG + '|' + (t ? t.days : -1);
   if (key !== tetKey) { tetKey = key; TET_BOARDS.forEach(paintTetBoard); }
@@ -2079,7 +2170,7 @@ async function probEnd(s) {
   await new Promise(res => {
     ui(V('Kết thúc thử việc', 'Probation complete'), b => {
       h('div', 'big', '📝', b); h('div', 'say', verdict, b).style.fontSize = '19px'; h('div', 'say', flavor, b);
-      h('div', 'say', VP(`Lương thử việc ${fmtMoney(s.net)} đã vào ví và vẫn được tính vào tổng thu nhập cuối cùng.`, 'Your probation pay of {} is in your wallet and still counts toward your final total income.', 'Lương thử việc {} đã vào ví và vẫn được tính vào tổng thu nhập cuối cùng.'), b);
+      rankSummary(b); h('div', 'say', VP(`Lương thử việc ${fmtMoney(s.net)} đã vào ví và vẫn được tính vào tổng thu nhập cuối cùng.`, 'Your probation pay of {} is in your wallet and still counts toward your final total income.', 'Lương thử việc {} đã vào ví và vẫn được tính vào tổng thu nhập cuối cùng.'), b);
       h('div', 'say', V('Chọn phòng ban chính thức (có thể giữ nguyên hoặc đổi):', 'Choose your permanent department (keep this one or switch):'), b);
       const g = h('div', 'grid3', null, b);
       DEPT_ORDER.forEach(id => { const d = DEPTS[id], t = h('div', 'tile' + (id === pick ? ' sel' : ''), '', g); t.style.cssText = 'padding:8px 4px;font-size:13px'; h('big', '', d.icon, t).style.fontSize = '22px'; t.append(tr(d.name)); t.addEventListener('click', () => { Aud.click(); pick = id; [...g.children].forEach(c => c.classList.toggle('sel', c === t)); }); });
@@ -2149,6 +2240,7 @@ function updateNear() {
 }
 function updateDecor(dt) {
   const t = ST.time;
+  if (REQ_MARK) { const on = ST.mode === 'play' && isOpen('req'); REQ_MARK.visible = on; if (on) REQ_MARK.position.y = 3.3 + 0.12 * Math.sin(t * 4); }
   for (const s of STATIONS) {
     const on = ST.mode !== 'title' && AVAIL[s.id](); s.ring.visible = on; s.label.visible = on && ST.mode === 'play';
     if (!on) continue; const urg = URGENT[s.id] && isOpen(URGENT[s.id]), near = nearSt === s, sc = 1 + 0.12 * Math.sin(t * 3 + s.x);
@@ -2183,6 +2275,7 @@ function setupInput() {
   $('bMute').addEventListener('click', () => { Aud.setMuted(!Aud.muted); $('bMute').textContent = Aud.muted ? '🔇' : '🔊'; });
   $('bSpeed').addEventListener('click', () => { ST.fast = !ST.fast; $('bSpeed').style.opacity = ST.fast ? 0.55 : 1; toast(ST.fast ? 'Thời gian trôi nhanh gấp đôi, đi lại cũng nhanh hơn.' : 'Tốc độ bình thường.', 1800); });
   $('bTasks').addEventListener('click', () => $('tasks').classList.toggle('hide'));
+  $('bRank').addEventListener('click', () => { Aud.click(); openRank(); });
 }
 function applyTouchUI() { $('joy').style.display = 'block'; $('hint').style.display = 'none'; }
 async function startActivity(id) {
@@ -2209,6 +2302,7 @@ function updateCamera(dt) {
 }
 
 const TUT = ['Dùng cần điều khiển bên trái (hoặc phím W A S D) để đi lại. Kéo màn hình để xoay camera.', 'Góc phải là danh sách VIỆC HÔM NAY. Vòng sáng trên sàn là nơi làm việc (màu cam nghĩa là đang gấp).', 'Chạm nút hành động to ở góc phải dưới (hoặc phím E). Giữ Tâm trạng, Năng lượng, KPI và độ ưa của sếp ổn nhé. Cuối tuần nhớ ghé kế toán nhận lương!'];
+TUT.push(V('Khi có đồng nghiệp tới nhờ việc, hãy quay về BÀN LÀM VIỆC của bạn (có biển cam 📌 phía trên) rồi chọn "Làm việc" để giúp họ. Giúp xong được thưởng KPI và tình đồng nghiệp.', 'When a colleague comes to ask for help, go back to YOUR DESK (look for the orange 📌 sign above it) and choose "Work" to help them. You earn KPI and team goodwill.'));
 let tutI = 0;
 function tutShow() { if (tutI >= TUT.length) { tutEnd(); return; } $('tut').style.display = 'block'; $('tutText').textContent = TUT[tutI]; $('tutDots').textContent = TUT.map((_, i) => i === tutI ? '●' : '○').join(' '); $('tutNext').textContent = tutI === TUT.length - 1 ? 'Bắt đầu' : 'Tiếp'; }
 function tutEnd() { $('tut').style.display = 'none'; save.tutorialDone = true; persist(); }
