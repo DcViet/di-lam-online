@@ -1,12 +1,14 @@
-# Đi Làm Online
+# Đi Làm Vui Hông?
 
-Game web 3D mô phỏng một tuần đi làm ở văn phòng, viết trong **một file `index.html`** (Three.js, không cần cài đặt).
-A single-file 3D web game about surviving an office week. Vietnamese / English.
+Đi làm không sợ, không sợ deadline… chỉ sợ bị trừ lương! Game web 3D mô phỏng một tuần đi làm ở văn phòng, viết trong **một file `index.html`** (Three.js, không cần cài đặt).
+"Is Work Fun?" is a single-file 3D web game about surviving an office week. Vietnamese / English.
 
 ## Chơi
 Mở `index.html` bằng trình duyệt (cần mạng lần đầu để tải Three.js từ CDN), hoặc dùng bản GitHub Pages của repo này.
 
-- Chọn ngôn ngữ (Tiếng Việt / English) và server phòng ban: Kế toán, Thiết kế, Sale, Marketing, Đối ngoại, Hành chính - Nhân sự, Sếp (10 người).
+- Chọn ngôn ngữ (Tiếng Việt / English) và server phòng ban: Kế toán, Thiết kế, Sale, Marketing, Đối ngoại, Hành chính - Nhân sự, Công nghệ, Chăm sóc khách hàng, Sếp (10 người). Tổng cộng 9 server, xếp vừa lưới 3x3.
+- Bắt đầu bằng **Thử việc 1 ngày** (lương thử việc bằng 85%, chưa đóng bảo hiểm). Xong thử việc bạn được chọn lại phòng ban (giữ hoặc đổi) và ký hợp đồng **3 hoặc 5 ngày**. Lương thử việc vẫn được cộng vào tổng thu nhập cuối cùng. Cũng có thể bỏ qua và vào thẳng 3 hoặc 5 ngày.
+- Trong văn phòng có bảng đếm ngược đến Tết Nguyên Đán (một bảng đứng giữa sàn, một bảng ở pantry), tính theo ngày thực ở Việt Nam (múi giờ UTC+7).
 - Điều khiển: WASD / phím mũi tên để đi, kéo chuột để xoay, E hoặc Space để làm.
 - Hoạt động: chấm công, họp, nhận hồ sơ, đánh máy, ngủ trưa, chọn món trưa, đặt trà sữa, lấy đồ shipper, buôn chuyện, cãi nhau, nghe sếp la, OT, nhận lương.
 
